@@ -1,4 +1,4 @@
-from streamtg.server import routes
+from streamtg.server.routes import routes
 from aiohttp import web
 
 def web_server():
