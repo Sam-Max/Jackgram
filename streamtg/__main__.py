@@ -3,8 +3,8 @@ import asyncio
 import logging
 import traceback
 import logging.handlers as handlers
-from StreamTGAPI.server import web_server
-from StreamTGAPI.bot import BIND_ADDRESS, PORT, stream_bot
+from streamtg.server import web_server
+from streamtg.bot import BIND_ADDRESS, PORT, StreamBot
 from aiohttp import web
 from pyrogram import idle
 
@@ -25,6 +25,8 @@ logging.basicConfig(
     ],
 )
 
+bot_logger = logging.getLogger("streamtg").setLevel(logging.DEBUG)
+
 server = web.AppRunner(web_server())
 
 loop = asyncio.get_event_loop()
@@ -32,7 +34,7 @@ loop = asyncio.get_event_loop()
 
 async def start_services():
     print("Initializing Client...")
-    await stream_bot.start()
+    await StreamBot.start()
     
     print("Initializing Web Server...")
     await server.setup()
@@ -44,7 +46,7 @@ async def start_services():
 
 async def cleanup():
     await server.cleanup()
-    await stream_bot.stop()
+    await StreamBot.stop()
 
 
 if __name__ == "__main__":
