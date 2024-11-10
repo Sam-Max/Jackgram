@@ -7,13 +7,12 @@ from streamtg.utils.database import Database
 plugins = {"root": "streamtg/bot/plugins"}
 no_updates = None
 
-
-load_dotenv()
+load_dotenv('config.env', override=True)
 
 API_ID = int(env.get("API_ID"))
 API_HASH = str(env.get("API_HASH"))
 BOT_TOKEN = str(env.get("BOT_TOKEN"))
-OWNER_ID = int(env.get("OWNER_ID", ""))
+# OWNER_ID = int(env.get("OWNER_ID", ""))
 DATABASE_URL = str(env.get("DATABASE_URL"))
 SLEEP_THRESHOLD = int(env.get("SLEEP_THRESHOLD", "60"))
 AUTH_USERS = list(set(int(x) for x in str(env.get("AUTH_USERS", "")).split()))
