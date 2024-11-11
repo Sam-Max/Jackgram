@@ -40,11 +40,11 @@ async def stream_series(request):
     if not imdb_id:
         return web.json_response({"stream": []})
 
-    data = db.get_tmdb(imdb_id)
+    data = await db.get_tmdb(imdb_id)
 
     if data is None:
         return web.json_response({"error": "Item not found"}, status=404)
-    
+
     if data.get("type") == "movie":
         info = extract_movie_info(data)
 
@@ -66,11 +66,11 @@ def extract_show_info(data, season_num, episode_num):
         if season.get("season_number") == int(season_num):
             for episode in season.get("episodes", []):
                 if episode.get("episode_number") == int(episode_num):
-                    
+
                     channel_id = episode["file_info"][0].get("chn_id")
                     message_id = episode["file_info"][0].get("msg_id")
                     hash = episode["file_info"][0].get("hash")
-                    title= episode.get("title")
+                    title = episode.get("title")
 
                     url = generate_link(channel_id, message_id, hash)
 
@@ -91,7 +91,30 @@ def extract_show_info(data, season_num, episode_num):
 
 
 def extract_movie_info(data):
-    pass
+    movie_info = []
+    
+    title = data.get("title")
+    release_date = data.get("release_date")
+    runtime= data.get("runtime")
+
+    for file in data["file_info"]:
+        channel_id = file.get("chn_id")
+        message_id = file.get("msg_id")
+        hash = file.get("hash")
+        
+        url = generate_link(channel_id, message_id, hash)
+
+        file_info = {
+            "name": "Telegram",
+            "title": title,
+            "date": release_date,
+            "duration": runtime,
+            "quality": file.get("quality"),
+            "size": file.get("size"),
+            "link": url,
+        }
+        movie_info.append(file_info)
+    return movie_info
 
 
 def generate_link(chat_id, msg_id, hash):
