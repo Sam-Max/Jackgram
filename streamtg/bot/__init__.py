@@ -1,6 +1,7 @@
+from os import getenv
+
 from pyrogram import Client
 from dotenv import load_dotenv
-from os import environ as env
 
 from streamtg.utils.database import Database
 
@@ -9,19 +10,19 @@ no_updates = None
 
 load_dotenv('config.env', override=True)
 
-API_ID = int(env.get("API_ID"))
-API_HASH = str(env.get("API_HASH"))
-BOT_TOKEN = str(env.get("BOT_TOKEN"))
-# OWNER_ID = int(env.get("OWNER_ID", ""))
-DATABASE_URL = str(env.get("DATABASE_URL"))
-SLEEP_THRESHOLD = int(env.get("SLEEP_THRESHOLD", "60"))
-AUTH_USERS = list(set(int(x) for x in str(env.get("AUTH_USERS", "")).split()))
+API_ID = int(getenv("API_ID"))
+API_HASH = str(getenv("API_HASH"))
+BOT_TOKEN = str(getenv("BOT_TOKEN"))
+# OWNER_ID = int(getenv("OWNER_ID", ""))
+DATABASE_URL = str(getenv("DATABASE_URL"))
+SLEEP_THRESHOLD = int(getenv("SLEEP_THRESHOLD", "60"))
+AUTH_USERS = list(set(int(x) for x in str(getenv("AUTH_USERS", "")).split()))
 
 # WebServer
-PORT = int(env.get("PORT", 8080))
+PORT = int(getenv("PORT", 8080))
 BASE_URL = "http://127.0.0.1:{}/".format(str(PORT))
-BIND_ADDRESS = str(env.get("BIND_ADDRESS", "0.0.0.0"))
-PING_INTERVAL = int(env.get("PING_INTERVAL", "1200"))
+BIND_ADDRESS = str(getenv("BIND_ADDRESS", "0.0.0.0"))
+PING_INTERVAL = int(getenv("PING_INTERVAL", "1200"))
 
 
 StreamBot = Client(
@@ -36,3 +37,4 @@ StreamBot = Client(
 
 def get_db():
     return Database(DATABASE_URL, "streamtgdb")
+
