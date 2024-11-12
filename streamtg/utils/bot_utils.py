@@ -2,9 +2,8 @@ import datetime
 from pyrogram.enums import ChatType
 from pyrogram.types import Message
 from pyrogram.file_id import FileId
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
-from streamtg.bot import BASE_URL, StreamBot
-from streamtg import bot_logger
+from pyrogram.types import Message
+from streamtg.bot import BASE_URL
 
 
 def get_file_info(message):
@@ -74,11 +73,9 @@ def get_name(media_msg):
     return file_name
 
 
-async def generate_link(_id):
-    page_link = f"{BASE_URL}watch/{_id}"
-    stream_link = f"{BASE_URL}dl/{_id}"
-    file_link = f"https://t.me/{StreamBot.username}?start=file_{_id}"
+def generate_link(chat_id, msg_id, hash):
+    return f"{BASE_URL}dl/{chat_id}?id={msg_id}&hash={hash}"
 
-    bot_logger.info(page_link)
-    bot_logger.info(stream_link)
-    bot_logger.info(file_link)
+def generate_telegram_link(channel_id, msg_id):
+    return f"https://t.me/c/{channel_id}/{msg_id}"
+    # return f"https://t.me/{StreamBot.me.username}?start=file_{msg_id}"
