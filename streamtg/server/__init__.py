@@ -1,5 +1,5 @@
 from streamtg.server.routes import routes
-from streamtg.server.api.streamtg_api import routes as api
+from streamtg.server.api.bot_api import routes as api
 from aiohttp import web
 
 def web_server():
