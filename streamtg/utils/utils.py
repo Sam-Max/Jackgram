@@ -5,27 +5,25 @@ def extract_show_info_raw(data):
     show_info = []
     for season in data.get("seasons", []):
         for episode in season.get("episodes", []):
-            channel_id = episode["file_info"][0].get("chn_id")
-            message_id = episode["file_info"][0].get("msg_id")
-            hash = episode["file_info"][0].get("hash")
-            title = episode["file_info"][0].get("original_title")
+            for info in episode["file_info"]:
+                channel_id = info.get("chn_id")
+                message_id = info.get("msg_id")
+                hash = info.get("hash")
+                title = info.get("original_title")
 
-            url = generate_link(channel_id, message_id, hash)
+                url = generate_link(channel_id, message_id, hash)
 
-            # season_number = season.get("season_number")
-            # episode_number = episode.get("episode_number")
+                episode_info = {
+                    "tracker": "Telegram",
+                    "title": title,
+                    "date": episode.get("date"),
+                    "duration": episode.get("duration"),
+                    "quality": episode["file_info"][0].get("quality"),
+                    "size": episode["file_info"][0].get("size"),
+                    "link": url,
+                }
 
-            episode_info = {
-                "tracker": "Telegram",
-                "title": title,
-                "date": episode.get("date"),
-                "duration": episode.get("duration"),
-                "quality": episode["file_info"][0].get("quality"),
-                "size": episode["file_info"][0].get("size"),
-                "link": url,
-            }
-
-            show_info.append(episode_info)
+                show_info.append(episode_info)
     return show_info
 
 
@@ -35,27 +33,24 @@ def extract_show_info(data, season_num, episode_num):
         if season.get("season_number") == int(season_num):
             for episode in season.get("episodes", []):
                 if episode.get("episode_number") == int(episode_num):
+                    for info in episode["file_info"]:
+                        channel_id = info.get("chn_id")
+                        message_id = info.get("msg_id")
+                        hash = info.get("hash")
+                        title = info.get("original_title")
 
-                    channel_id = episode["file_info"][0].get("chn_id")
-                    message_id = episode["file_info"][0].get("msg_id")
-                    hash = episode["file_info"][0].get("hash")
-                    title = episode["file_info"][0].get("original_title")
+                        url = generate_link(channel_id, message_id, hash)
 
-                    url = generate_link(channel_id, message_id, hash)
-
-                    # season_number = season.get("season_number")
-                    # episode_number = episode.get("episode_number")
-
-                    episode_info = {
-                        "tracker": "Telegram",
-                        "title": title,
-                        "date": episode.get("date"),
-                        "duration": episode.get("duration"),
-                        "quality": episode["file_info"][0].get("quality"),
-                        "size": episode["file_info"][0].get("size"),
-                        "link": url,
-                    }
-                show_info.append(episode_info)
+                        episode_info = {
+                            "tracker": "Telegram",
+                            "title": title,
+                            "date": episode.get("date"),
+                            "duration": episode.get("duration"),
+                            "quality": episode["file_info"][0].get("quality"),
+                            "size": episode["file_info"][0].get("size"),
+                            "link": url,
+                        }
+                        show_info.append(episode_info)
     return show_info
 
 
