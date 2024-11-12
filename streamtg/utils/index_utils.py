@@ -75,15 +75,6 @@ async def get_media_details(data, filename):
 
 async def process_series(media_id, data, series_details, episode_details, file_info):
     genres = [genre["name"] for genre in series_details.get("genres", [])]
-    india_rating = next(
-        (
-            result["rating"]
-            for result in series_details["content_ratings"]["results"]
-            if result["iso_3166_1"] == "IN"
-        ),
-        None,
-    )
-
     series_doc = {
         "tmdb_id": series_details.get("id"),
         "title": series_details.get("name"),
@@ -92,7 +83,6 @@ async def process_series(media_id, data, series_details, episode_details, file_i
         "release_date": series_details.get("first_air_date"),
         "poster": series_details.get("poster_path"),
         "backdrop": series_details.get("backdrop_path"),
-        "rate": india_rating,
         "type": "tv",
         "genres": genres,
         "seasons": [
