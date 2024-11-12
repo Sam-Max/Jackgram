@@ -23,14 +23,15 @@ async def root_route_handler(_):
         {
             "server_status": "running",
             "uptime": get_readable_time(time.time() - StartTime),
-            "telegram_bot": "@" + StreamBot.username,
+            "telegram_bot": "@" + StreamBot.me.username,
             "version": __version__,
         }
     )
 
 
-@routes.get("/dl/{chat_id}/{encoded_name}", allow_head=True)
+@routes.get("/dl/{chat_id}", allow_head=True)
 async def stream_handler(request: web.Request):
+    print("routes::stream_handler")
     try:
         chat_id = request.match_info['chat_id']
         chat_id = f"-100{chat_id}"
@@ -45,8 +46,6 @@ async def stream_handler(request: web.Request):
         pass
     except Exception as e:
         traceback.print_exc()
-        logging.critical(e.with_traceback(None))
-        logging.debug(traceback.format_exc())
         raise web.HTTPInternalServerError(text=str(e))
 
 
