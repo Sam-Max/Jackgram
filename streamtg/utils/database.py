@@ -48,20 +48,25 @@ class Database:
     async def get_tmdb(self, tmdb_id):
         return await self.tmdb_collection.find_one({"tmdb_id": int(tmdb_id)})
 
+    async def del_tdmb(self, tmdb_id):
+        return await self.tmdb_collection.delete_one({"tmdb_id": int(tmdb_id)})
+
     async def search_tmdb(self, query, page=1, per_page=50):
         words = query.split()
-        regex_query = {"title": {"$regex": ".*" + ".*".join(words) + ".*", "$options": "i"}}
+        regex_query = {
+            "title": {"$regex": ".*" + ".*".join(words) + ".*", "$options": "i"}
+        }
         offset = (int(page) - 1) * per_page
 
         mydoc = (
-             self.tmdb_collection.find(regex_query)
+            self.tmdb_collection.find(regex_query)
             .sort("msg_id", DESCENDING)
             .skip(offset)
             .limit(per_page)
         )
 
         results = await mydoc.to_list(length=per_page)
-        
+
         total_count = await self.tmdb_collection.count_documents(regex_query)
 
         return results, total_count
@@ -76,6 +81,7 @@ class Database:
             elif media_type == "movie":
                 await self._update_movie(existing_media, media_doc)
 
+            print(existing_media)
             await self.tmdb_collection.replace_one({"tmdb_id": tmdb_id}, existing_media)
         else:
             await self.tmdb_collection.insert_one(media_doc)
@@ -121,24 +127,21 @@ class Database:
         )
 
     async def _update_episode(self, existing_episode, episode):
-        for quality in episode["file_info"]:
-            await self._update_quality(existing_episode, quality)
+        for info in episode["file_info"]:
+            if matched_file_episode := next(
+                (q for q in existing_episode["file_info"] if q["hash"] == info["hash"]),
+                None,
+            ):
+                matched_file_episode.update(info)
+            else:
+                existing_episode["file_info"].append(info)
 
     async def _update_movie(self, existing_media, media_doc):
-        for quality in media_doc["file_info"]:
-            await self._update_quality(existing_media, quality)
-
-    async def _update_quality(self, existing_episode, quality):
-        existing_quality = next(
-            (
-                q
-                for q in existing_episode["file_info"]
-                if q["quality"] == quality["quality"]
-            ),
-            None,
-        )
-
-        if existing_quality:
-            existing_quality.update(quality)
-        else:
-            existing_episode["file_info"].append(quality)
+        for info in media_doc["file_info"]:
+            if matched_file_movie := next(
+                (q for q in existing_media["file_info"] if q["hash"] == info["hash"]),
+                None,
+            ):
+                matched_file_movie.update(info)
+            else:
+                existing_media["file_info"].append(info)
