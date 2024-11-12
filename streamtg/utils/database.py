@@ -6,6 +6,7 @@ from streamtg.server.exceptions import FileNotFound
 from pymongo.errors import DuplicateKeyError
 from pymongo import DESCENDING
 
+
 class Database:
     def __init__(self, uri, database_name):
         self._client = motor.motor_asyncio.AsyncIOMotorClient(uri)
@@ -23,7 +24,7 @@ class Database:
             return fetch_old["_id"]
         await self.count_links(file_info["user_id"], "+")
         return (await self.file_collection.insert_one(file_info)).inserted_id
-    
+
     async def get_file(self, _id):
         try:
             file_info = await self.file_collection.find_one({"_id": ObjectId(_id)})
@@ -32,7 +33,7 @@ class Database:
             return file_info
         except InvalidId:
             raise FileNotFound
-        
+
     # TDMB
     async def add_tmdb(self, data):
         try:
@@ -45,33 +46,36 @@ class Database:
             print(f"TMDB entry with ID {data.get('tmdb_id')} already exists")
 
     async def get_tmdb(self, tmdb_id):
-        return await self.tmdb_collection.find_one({"tmdb_id": tmdb_id})
-    
+        return await self.tmdb_collection.find_one({"tmdb_id": int(tmdb_id)})
+
     async def search_tmdb(self, query, page=1, per_page=50):
         words = query.split()
-        regex_query = {'$regex': '.*' + '.*'.join(words) + '.*', '$options': 'i'}
-        query = {'title': regex_query}
+        regex_query = {"title": {"$regex": ".*" + ".*".join(words) + ".*", "$options": "i"}}
         offset = (int(page) - 1) * per_page
 
-        total_count = await self.tmdb_collection.count_documents(query)
+        mydoc = (
+             self.tmdb_collection.find(regex_query)
+            .sort("msg_id", DESCENDING)
+            .skip(offset)
+            .limit(per_page)
+        )
 
-        mydoc = await self.tmdb_collection.find(query).sort('msg_id', DESCENDING).skip(offset).limit(per_page)
-        return list(mydoc), total_count
-    
+        results = await mydoc.to_list(length=per_page)
+        
+        total_count = await self.tmdb_collection.count_documents(regex_query)
+
+        return results, total_count
+
     async def update_tmdb(self, media_doc, media_type):
         tmdb_id = media_doc["tmdb_id"]
         existing_media = await self.tmdb_collection.find_one({"tmdb_id": tmdb_id})
-        
-        print("database::update_tmdb")
-        print(existing_media)
-        print("database::update_tmdb")
-        
+
         if existing_media:
             if media_type == "series":
                 await self._update_series(existing_media, media_doc)
             elif media_type == "movie":
                 await self._update_movie(existing_media, media_doc)
-            
+
             await self.tmdb_collection.replace_one({"tmdb_id": tmdb_id}, existing_media)
         else:
             await self.tmdb_collection.insert_one(media_doc)
@@ -79,7 +83,7 @@ class Database:
     async def _update_series(self, existing_media, media_doc):
         for season in media_doc["seasons"]:
             existing_season = await self._get_existing_season(existing_media, season)
-            
+
             if existing_season:
                 await self._update_season(existing_season, season)
             else:
@@ -87,14 +91,20 @@ class Database:
 
     async def _get_existing_season(self, existing_media, season):
         return next(
-            (s for s in existing_media["seasons"] if s["season_number"] == season["season_number"]),
-            None
+            (
+                s
+                for s in existing_media["seasons"]
+                if s["season_number"] == season["season_number"]
+            ),
+            None,
         )
 
     async def _update_season(self, existing_season, season):
         for episode in season["episodes"]:
-            existing_episode = await self._get_existing_episode(existing_season, episode)
-            
+            existing_episode = await self._get_existing_episode(
+                existing_season, episode
+            )
+
             if existing_episode:
                 await self._update_episode(existing_episode, episode)
             else:
@@ -102,27 +112,33 @@ class Database:
 
     async def _get_existing_episode(self, existing_season, episode):
         return next(
-            (e for e in existing_season["episodes"] if e["episode_number"] == episode["episode_number"]),
-            None
+            (
+                e
+                for e in existing_season["episodes"]
+                if e["episode_number"] == episode["episode_number"]
+            ),
+            None,
         )
 
     async def _update_episode(self, existing_episode, episode):
-        for quality in episode["qualities"]:
+        for quality in episode["file_info"]:
             await self._update_quality(existing_episode, quality)
 
     async def _update_movie(self, existing_media, media_doc):
-        for quality in media_doc["qualities"]:
+        for quality in media_doc["file_info"]:
             await self._update_quality(existing_media, quality)
 
     async def _update_quality(self, existing_episode, quality):
         existing_quality = next(
-            (q for q in existing_episode["qualities"] if q["quality"] == quality["quality"]),
-            None
+            (
+                q
+                for q in existing_episode["file_info"]
+                if q["quality"] == quality["quality"]
+            ),
+            None,
         )
-        
+
         if existing_quality:
             existing_quality.update(quality)
         else:
-            existing_episode["qualities"].append(quality)
-
-    
+            existing_episode["file_info"].append(quality)
