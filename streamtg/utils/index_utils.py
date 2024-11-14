@@ -49,7 +49,7 @@ async def extract_file_info(file, message, filename):
     }
 
 
-async def get_media_details(data, filename):
+async def get_media_details(data):
     title = data.get("title")
     year = data.get("year")
 
@@ -94,9 +94,9 @@ async def process_series(media_id, data, series_details, episode_details, file_i
                         "series": series_details.get("name"),
                         "season_number": data.get("season"),
                         "episode_number": data.get("episode"),
-                        "date": series_details.get("air_date"),
-                        "duration": series_details.get("runtime"),
-                        "title": series_details.get("name"),
+                        "date": episode_details.get("air_date"),
+                        "duration": episode_details.get("runtime"),
+                        "title": episode_details.get("name"),
                         "description": series_details.get("overview"),
                         "poster": series_details.get("still_path"),
                         "rating": series_details.get("vote_average"),
@@ -106,6 +106,8 @@ async def process_series(media_id, data, series_details, episode_details, file_i
             }
         ],
     }
+
+    print(series_doc)
 
     if await db.get_tmdb(tmdb_id=media_id):
         await db.update_tmdb(series_doc, "series")
