@@ -91,8 +91,9 @@ async def search(bot: Client, message: Message):
         count = 0
         for i in info:
             count += 1
+            name = i["title"]
             link = generate_link(tmdb_id=results[0]["tmdb_id"], hash=i["hash"])
-            results_list += f"{count}. {link}\n"
+            results_list += f"{count}. [{name}]({link})\n"
 
         await message.reply_text(results_list)
     else:
