@@ -1,17 +1,14 @@
 import re
 from streamtg.utils.bot_utils import generate_link
 
+
 def extract_show_info_raw(data):
     show_info = []
     for season in data.get("seasons", []):
         for episode in season.get("episodes", []):
             for info in episode["file_info"]:
-                channel_id = info.get("chn_id")
-                message_id = info.get("msg_id")
-                hash = info.get("hash")
-                title = info.get("original_title")
-
-                url = generate_link(channel_id, message_id, hash)
+                title = info.get("file_name")
+                secure_hash = info.get("hash")
 
                 episode_info = {
                     "tracker": "Telegram",
@@ -20,7 +17,7 @@ def extract_show_info_raw(data):
                     "duration": episode.get("duration"),
                     "quality": episode["file_info"][0].get("quality"),
                     "size": episode["file_info"][0].get("size"),
-                    "link": url,
+                    "hash": secure_hash,
                 }
 
                 show_info.append(episode_info)
@@ -34,12 +31,8 @@ def extract_show_info(data, season_num, episode_num):
             for episode in season.get("episodes", []):
                 if episode.get("episode_number") == int(episode_num):
                     for info in episode["file_info"]:
-                        channel_id = info.get("chn_id")
-                        message_id = info.get("msg_id")
-                        hash = info.get("hash")
-                        title = info.get("original_title")
-
-                        url = generate_link(channel_id, message_id, hash)
+                        title = info.get("file_name")
+                        secure_hash = info.get("hash")
 
                         episode_info = {
                             "tracker": "Telegram",
@@ -48,10 +41,23 @@ def extract_show_info(data, season_num, episode_num):
                             "duration": episode.get("duration"),
                             "quality": episode["file_info"][0].get("quality"),
                             "size": episode["file_info"][0].get("size"),
-                            "link": url,
+                            "hash": secure_hash,
                         }
                         show_info.append(episode_info)
     return show_info
+
+
+async def extract_media_by_hash(data, hash):
+    if data.get("type") == "tv":
+        for season in data.get("seasons", []):
+            for episode in season.get("episodes", []):
+                for info in episode["file_info"]:
+                    if info.get("hash") == hash:
+                        return info
+    else:
+        for info in data["file_info"]:
+            if info.get("hash") == hash:
+                return info
 
 
 def extract_movie_info(data):
@@ -60,22 +66,18 @@ def extract_movie_info(data):
     release_date = data.get("release_date")
     runtime = data.get("runtime")
 
-    for file in data["file_info"]:
-        channel_id = file.get("chn_id")
-        message_id = file.get("msg_id")
-        hash = file.get("hash")
-        title = file.get("original_title")
-
-        url = generate_link(channel_id, message_id, hash)
+    for info in data["file_info"]:
+        title = info.get("file_name")
+        secure_hash = info.get("hash")
 
         file_info = {
             "tracker": "Telegram",
             "title": title,
             "date": release_date,
             "duration": runtime,
-            "quality": file.get("quality"),
-            "size": file.get("size"),
-            "link": url,
+            "quality": info.get("quality"),
+            "size": info.get("size"),
+            "hash": secure_hash,
         }
         movie_info.append(file_info)
     return movie_info

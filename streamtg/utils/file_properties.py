@@ -1,13 +1,11 @@
 from __future__ import annotations
-import logging
 from datetime import datetime
-from pyrogram import Client
 from typing import Any, Optional
-from pyrogram.enums import ParseMode, ChatType
+from pyrogram.enums import ChatType
 from pyrogram.types import Message
 from pyrogram.file_id import FileId
 from streamtg.bot import get_db
-from streamtg.server.exceptions import FileNotFound
+from streamtg.utils.utils import extract_media_by_hash
 
 
 db = get_db()
@@ -86,19 +84,15 @@ def get_file_info(message):
     }
 
 
-async def get_file_ids(
-    client: Client, chat_id: int, message_id: int
-) -> Optional[FileId]:
-    message = await client.get_messages(chat_id, message_id)
-    if message.empty:
-        raise FileNotFound
-    file_id = file_unique_id = None
-    if media := is_media(message):
-        file_id, file_unique_id = FileId.decode(media.file_id), media.file_unique_id
-    setattr(file_id, "file_name", getattr(media, "file_name", ""))
-    setattr(file_id, "file_size", getattr(media, "file_size", 0))
-    setattr(file_id, "mime_type", getattr(media, "mime_type", ""))
-    setattr(file_id, "unique_id", file_unique_id)
+async def get_file_ids(tmdb_id, hash) -> Optional[FileId]:
+    print("file_properties::get_file_ids")
+    results = await db.get_tmdb(tmdb_id)
+    media = await extract_media_by_hash(results, hash)
+    file_id = FileId.decode(media["file_id"])
+    setattr(file_id, "file_name", media["file_name"])
+    setattr(file_id, "file_size", media["file_size"])
+    setattr(file_id, "mime_type", media["mime_type"])
+    setattr(file_id, "unique_id",  media["file_unique_id"])
     return file_id
 
 

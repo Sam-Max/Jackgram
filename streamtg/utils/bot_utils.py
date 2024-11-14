@@ -73,9 +73,8 @@ def get_name(media_msg):
     return file_name
 
 
-def generate_link(chat_id, msg_id, hash):
-    return f"{BASE_URL}dl/{chat_id}?id={msg_id}&hash={hash}"
+def generate_link(tmdb_id, hash):
+    return f"{BASE_URL}dl/{tmdb_id}?hash={hash}"
 
 def generate_telegram_link(channel_id, msg_id):
-    return f"https://t.me/c/{channel_id}/{msg_id}"
-    # return f"https://t.me/{StreamBot.me.username}?start=file_{msg_id}"
+    return f"https://t.me/{StreamBot.me.username}?start=file_{msg_id}"

@@ -29,16 +29,11 @@ from streamtg.utils.index_utils import (
 )
 async def private_receive_handler(bot: Client, message: Message):
     try:
-        channel_id = message.chat.id
         file = message.video or message.document
-
-        title, original_title = get_file_title(file, message)
+        title = get_file_title(file, message)
         filename = format_filename(title)
-        file_info = await extract_file_info(
-            file, message, channel_id, filename, original_title
-        )
+        file_info = await extract_file_info(file, message, filename)
 
-        print(file_info)
         data = PTN.parse(filename)
         media_id, media_details, episode_details = await get_media_details(
             data, filename

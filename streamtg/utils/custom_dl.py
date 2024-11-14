@@ -15,20 +15,19 @@ class ByteStreamer:
         self.__cached_file_ids = {}
         asyncio.create_task(self.clean_cache())
 
-    async def get_file_properties(self, chat_id: int, message_id: int) -> FileId:
+    async def get_file_properties(self, tmdb_id: int, secure_hash: str) -> FileId:
         """
         Returns the properties of a media of an specific message in a FileId class.
         If the properties are cached, then it'll return the cached results.
         or it'll generate the properties from the Message ID and cache them.
         """
 
-        if message_id not in self.__cached_file_ids:
-            file_id = await get_file_ids(self.client, int(chat_id), int(message_id))
+        if hash not in self.__cached_file_ids:
+            file_id = await get_file_ids(tmdb_id, secure_hash)
             if not file_id:
-                logging.info("Message with ID %s not found!", message_id)
                 raise FileNotFound
-            self.__cached_file_ids[message_id] = file_id
-        return self.__cached_file_ids[message_id]
+            self.__cached_file_ids[hash] = file_id
+        return self.__cached_file_ids[hash]
     
     async def yield_file(
         self,

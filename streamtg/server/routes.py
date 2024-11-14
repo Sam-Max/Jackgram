@@ -6,7 +6,7 @@ import mimetypes
 import traceback
 from aiohttp import web
 from aiohttp.http_exceptions import BadStatusLine
-from streamtg.bot import StreamBot
+from streamtg.bot import StreamBot, get_db
 from streamtg.server.exceptions import FileNotFound, InvalidHash
 from streamtg import __version__, StartTime
 from streamtg.utils.custom_dl import ByteStreamer
@@ -15,7 +15,7 @@ from streamtg.utils.utils import get_readable_time
 routes = web.RouteTableDef()
 
 class_cache = {}
-
+db = get_db()
 
 @routes.get("/status", allow_head=True)
 async def root_route_handler(_):
@@ -29,15 +29,13 @@ async def root_route_handler(_):
     )
 
 
-@routes.get("/dl/{chat_id}", allow_head=True)
+@routes.get("/dl/{tmdb_id}", allow_head=True)
 async def stream_handler(request: web.Request):
     print("routes::stream_handler")
     try:
-        chat_id = request.match_info['chat_id']
-        chat_id = f"-100{chat_id}"
-        message_id = request.query.get('id')
+        tmdb_id = request.match_info['tmdb_id']
         secure_hash = request.query.get('hash')
-        return await media_streamer(request, int(chat_id), int(message_id), secure_hash)
+        return await media_streamer(request, tmdb_id, secure_hash)
     except InvalidHash as e:
         raise web.HTTPForbidden(text=e.message)
     except FileNotFound as e:
@@ -47,9 +45,9 @@ async def stream_handler(request: web.Request):
     except Exception as e:
         traceback.print_exc()
         raise web.HTTPInternalServerError(text=str(e))
+    
 
-
-async def media_streamer(request: web.Request, chat_id: int, id: int, secure_hash: str):
+async def media_streamer(request: web.Request, tmdb_id: int, secure_hash: str):
     range_header = request.headers.get("Range", 0)
 
     if StreamBot in class_cache:
@@ -59,8 +57,11 @@ async def media_streamer(request: web.Request, chat_id: int, id: int, secure_has
         tg_connect = ByteStreamer(StreamBot)
         class_cache[StreamBot] = tg_connect
 
-    file_id = await tg_connect.get_file_properties(chat_id=chat_id, message_id=id)
+    file_id = await tg_connect.get_file_properties(tmdb_id, secure_hash)
     
+    print("routes::media_streamer")
+    print(file_id)
+
     if file_id.unique_id[:6] != secure_hash:
         logging.debug(f"Invalid hash for message with ID {id}")
         raise InvalidHash
@@ -124,3 +125,4 @@ async def media_streamer(request: web.Request, chat_id: int, id: int, secure_has
             "Accept-Ranges": "bytes",
         },
     )
+

@@ -18,7 +18,7 @@ async def get_auth_channel():
 
 def get_file_title(file, message):
     title = file.file_name or message.caption or file.file_id
-    return title.replace("_", " ").replace(".", " "), title
+    return title.replace("_", " ").replace(".", " ")
 
 
 def format_filename(title):
@@ -27,24 +27,25 @@ def format_filename(title):
     return filename.replace(".", " ")
 
 
-async def extract_file_info(file, message, channel_id, filename, original_title):
-    size = get_readable_size(file.file_size)
-    file_type = file.mime_type
-    msg_id = message.id
+async def extract_file_info(file, message, filename):
+    name = file.file_name
+    size = file.file_size
+    mime_type = file.mime_type
+    file_id = file.file_id
+    file_unique_id = file.file_unique_id
     file_hash = file.file_unique_id[:6]
-    chn_id = str(channel_id).replace("-100", "")
 
     resolution = PTN.parse(filename).get("resolution") or (
         message.video.height if message.video else "other"
     )
     return {
-        "original_title": original_title,
         "quality": resolution,
-        "size": size,
-        "type": file_type,
+        "file_name": name,
+        "file_size": size,
+        "mime_type": mime_type,
+        "file_id": file_id,
+        "file_unique_id": file_unique_id,
         "hash": file_hash,
-        "chn_id": int(chn_id),
-        "msg_id": msg_id,
     }
 
 
