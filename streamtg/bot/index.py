@@ -1,4 +1,3 @@
-from asyncio import gather
 import asyncio
 import logging
 import PTN

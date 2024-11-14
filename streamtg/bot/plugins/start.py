@@ -1,5 +1,5 @@
 from asyncio import sleep
-from streamtg.bot import get_db, StreamBot
+from streamtg.bot import get_db, StreamBot, StreamUser
 from pyrogram import filters, Client
 from pyrogram.errors import FloodWait
 from pyrogram.types import (
@@ -22,15 +22,25 @@ async def start(bot: Client, message: Message):
 @StreamBot.on_message(filters.command("index") & filters.private)
 async def index(bot: Client, message: Message):
     args = message.text.split()[1:]
-    if len(args) == 3:
-        chat_id, first_id, last_id = map(int, args)
+    if len(args) == 4:
+        chat_id, first_id, last_id = map(int, args[:-1])
+        client_type = args[-1]
+
+        if client_type == "bot":
+            client = StreamBot
+        elif client_type == "user":
+            client = StreamUser
+        else:
+            await message.reply(text="Invalid channel type.")
+            return
+
         if last_id <= first_id:
             await message.reply(
                 text="The second value (last_id) must be greater than the first value (first_id)."
             )
             return
     else:
-        await message.reply(text="Use /index chat_id first_id last_id")
+        await message.reply(text="Use /index chat_id first_id last_id client_type")
         return
 
     try:
@@ -42,7 +52,7 @@ async def index(bot: Client, message: Message):
 
         wait_msg = await message.reply(text=start_message)
 
-        await index_channel(chat_id, first_id, last_id)
+        await index_channel(client, chat_id, first_id, last_id)
 
         await wait_msg.delete()
 
@@ -76,13 +86,13 @@ async def search(bot: Client, message: Message):
             info = extract_movie_info(results[0])
         else:
             info = extract_show_info_raw(results[0])
-        
+
         results_list = "Results:\n\n"
         count = 0
         for i in info:
             count += 1
-            link = (i["title"], i["link"])
-            results_list += f"{count}.{link}\n"
+            link = generate_link(tmdb_id=results[0]["tmdb_id"], hash=i["hash"])
+            results_list += f"{count}. {link}\n"
 
         await message.reply_text(results_list)
     else:
