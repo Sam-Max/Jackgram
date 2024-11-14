@@ -4,7 +4,7 @@ import logging
 import traceback
 import logging.handlers as handlers
 from streamtg.server import web_server
-from streamtg.bot import BIND_ADDRESS, PORT, StreamBot
+from streamtg.bot import BIND_ADDRESS, PORT, SESSION_STRING, StreamBot, StreamUser
 from aiohttp import web
 from pyrogram import idle
 
@@ -33,20 +33,25 @@ loop = asyncio.get_event_loop()
 
 
 async def start_services():
-    print("Initializing Client...")
+    logging.info("Initializing Bot Client...")
     await StreamBot.start()
-    
-    print("Initializing Web Server...")
+
+    if len(SESSION_STRING) != 0:
+        logging.info(f"Initializing User Client...")
+        await StreamUser.start()
+
+    logging.info("Initializing Web Server...")
     await server.setup()
     await web.TCPSite(server, BIND_ADDRESS, PORT).start()
-    
-    print("Service Started")
+
+    logging.info("Services Started")
     await idle()
 
 
 async def cleanup():
     await server.cleanup()
     await StreamBot.stop()
+    await StreamUser.stop()
 
 
 if __name__ == "__main__":
