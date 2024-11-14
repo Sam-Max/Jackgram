@@ -52,9 +52,7 @@ async def index_channel(
                 file_info = await extract_file_info(file, message, filename)
 
                 data = PTN.parse(filename)
-                media_id, media_details, episode_details = await get_media_details(
-                    data, filename
-                )
+                media_id, media_details, episode_details = await get_media_details(data)
 
                 if "season" in data and "episode" in data:
                     await process_series(
