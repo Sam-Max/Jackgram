@@ -17,7 +17,7 @@ async def fetch_message(client, chat_id, message_id):
     try:
         message = await client.get_messages(chat_id, message_id)
         if file := message.video or message.document:
-            return await send_message(client, file, LOGS_CHANNEL)
+            return await send_message(client, message, file, LOGS_CHANNEL)
     except FloodWait as e:
         logging.warning(f"Rate limit hit. Waiting for {e.value} seconds.")
         await asyncio.sleep(e.value)
@@ -27,8 +27,10 @@ async def fetch_message(client, chat_id, message_id):
         return None
 
 
-async def send_message(client, file, dest_channel):
-    return await client.send_cached_media(dest_channel, file.file_id)
+async def send_message(client, message, file, dest_channel):
+    return await client.send_cached_media(
+        dest_channel, caption=message.caption, file_id=file.file_id
+    )
 
 
 async def index_channel(
