@@ -1,14 +1,14 @@
 from asyncio import sleep
-from streamtg.bot import get_db, StreamBot, StreamUser
+from streamtg.bot import SECRET_KEY, get_db, StreamBot, StreamUser
 from pyrogram import filters, Client
 from pyrogram.errors import FloodWait
-from pyrogram.types import (
-    Message,
-)
+from pyrogram.types import Message
 import requests
 from streamtg.bot.index import index_channel
 from streamtg.utils.bot_utils import generate_link
 from streamtg.utils.utils import extract_movie_info, extract_show_info_raw
+import datetime
+import jwt
 
 session = requests.Session()
 db = get_db()
@@ -31,7 +31,7 @@ async def index(bot: Client, message: Message):
         elif client_type == "user":
             client = StreamUser
         else:
-            await message.reply(text="Invalid channel type.")
+            await message.reply(text="Invalid client type.")
             return
 
         if last_id <= first_id:
@@ -47,7 +47,7 @@ async def index(bot: Client, message: Message):
         start_message = (
             "🔄 Perform this action only once\n\n"
             "⏳ Files indexing is currently in progress.\n\n"
-            "🚫 Do not send any additional files or indexing other channels until this process completes.\n\n"
+            "🚫 Do not send any additional files or start indexing other channels until this process completes.\n\n"
         )
 
         wait_msg = await message.reply(text=start_message)
@@ -58,7 +58,7 @@ async def index(bot: Client, message: Message):
 
         await bot.send_message(
             chat_id=message.chat.id,
-            text="✅ All your files have been successfully stored in the database. You're all set!\n\n",
+            text="✅ All your files have been successfully stored in the database!!.\n\n",
         )
 
     except FloodWait as e:
@@ -115,3 +115,14 @@ async def delete(bot: Client, message: Message):
         await message.reply_text("Entry deleted successfully.")
     else:
         await message.reply_text("No document found with the given criteria")
+
+
+@StreamBot.on_message(filters.command("token") & filters.private)
+async def generate_token(client, message):
+    payload = {
+        "user_id": message.user.id,
+        "exp": datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24),  # Token expiration
+    }
+
+    token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    await message.reply_text(token)

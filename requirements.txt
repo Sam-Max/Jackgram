@@ -2,6 +2,7 @@ aiohttp
 pyrofork
 python-dotenv
 parse-torrent-title
+pyjwt
 tgcrypto
 motor
 aiofiles
