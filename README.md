@@ -27,7 +27,7 @@
       "streams": [
         {
           "name": "Telegram",
-          "title": "Angels",
+          "title": "TV Show Title",
           "date": "2021-12-31",
           "duration": 33,
           "quality": "720p",
@@ -56,7 +56,7 @@
       "streams": [
         {
           "name": "Telegram",
-          "title": "Megalopolis",
+          "title": "Movie Title",
           "date": "2024-09-25",
           "duration": 138,
           "quality": "720p",
@@ -92,7 +92,7 @@
           "files": [
             {
               "name": "Telegram",
-              "title": "DOTA_Dragon's_Blood_S02E01",
+              "title": "TV Show or Movie Title",
               "date": "2022-01-18",
               "duration": 25,
               "quality": "720p",
@@ -150,3 +150,8 @@ del_db - Delete a db by name
 ## **Contact Info**
 
 [![Telegram Username](https://img.shields.io/static/v1?label=&message=Telegram%20&color=blueviolet&style=for-the-badge&logo=telegram&logoColor=black)](https://t.me/sammax09)
+
+
+## Disclaimer:
+
+This bot should only be used to access movies and TV series not protected by copyright.
