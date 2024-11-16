@@ -6,11 +6,11 @@ import mimetypes
 import traceback
 from aiohttp import web
 from aiohttp.http_exceptions import BadStatusLine
-from streamtg.bot import StreamBot, get_db
-from streamtg.server.exceptions import FileNotFound, InvalidHash
-from streamtg import __version__, StartTime
-from streamtg.utils.custom_dl import ByteStreamer
-from streamtg.utils.utils import get_readable_time
+from jackgram.bot import StreamBot, get_db
+from jackgram.server.exceptions import FileNotFound, InvalidHash
+from jackgram import __version__, StartTime
+from jackgram.utils.custom_dl import ByteStreamer
+from jackgram.utils.utils import get_readable_time
 
 routes = web.RouteTableDef()
 
@@ -48,6 +48,7 @@ async def stream_handler(request: web.Request):
     
 
 async def media_streamer(request: web.Request, tmdb_id: int, secure_hash: str):
+    print("routes::media_streamer")
     range_header = request.headers.get("Range", 0)
 
     if StreamBot in class_cache:
@@ -59,9 +60,6 @@ async def media_streamer(request: web.Request, tmdb_id: int, secure_hash: str):
 
     file_id = await tg_connect.get_file_properties(tmdb_id, secure_hash)
     
-    print("routes::media_streamer")
-    print(file_id)
-
     if file_id.unique_id[:6] != secure_hash:
         logging.debug(f"Invalid hash for message with ID {id}")
         raise InvalidHash

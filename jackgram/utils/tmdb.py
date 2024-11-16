@@ -4,7 +4,7 @@ from os import getenv
 import re
 from typing import Optional
 from requests.sessions import Session
-from streamtg.utils.utils import clean_file_name
+from jackgram.utils.utils import clean_file_name
 
 
 TMDB_API = getenv("TMDB_API")

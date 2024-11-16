@@ -1,6 +1,6 @@
 from aiohttp import web
-from streamtg.bot import get_db
-from streamtg.utils.utils import (
+from jackgram.bot import get_db
+from jackgram.utils.utils import (
     extract_movie_info,
     extract_movie_info_raw,
     extract_show_info,

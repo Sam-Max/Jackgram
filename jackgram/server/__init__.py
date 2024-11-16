@@ -1,6 +1,6 @@
-from streamtg.bot import SECRET_KEY
-from streamtg.server.routes import routes
-from streamtg.server.api.bot_api import routes as api
+from jackgram.bot import SECRET_KEY
+from jackgram.server.routes import routes
+from jackgram.server.api.bot_api import routes as api
 from aiohttp import web
 import jwt
 
@@ -27,6 +27,7 @@ async def auth_middleware(app, handler):
 
 def web_server():
     web_app = web.Application(client_max_size=30000000, middlewares=[auth_middleware])
+    #web_app = web.Application(client_max_size=30000000)
     web_app.add_routes(routes)
     web_app.add_routes(api)
     return web_app

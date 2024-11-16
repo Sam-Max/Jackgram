@@ -1,6 +1,6 @@
 import re
-from streamtg.bot import get_db
-from streamtg.utils.tmdb import get_tmdb
+from jackgram.bot import get_db
+from jackgram.utils.tmdb import get_tmdb
 import PTN
 
 

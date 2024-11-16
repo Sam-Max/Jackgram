@@ -1,11 +1,11 @@
-from streamtg.bot import StreamBot
+from jackgram.bot import StreamBot
 import asyncio
 from pyrogram import filters, Client
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 from pyrogram.enums.parse_mode import ParseMode
 import PTN
-from streamtg.utils.index_utils import (
+from jackgram.utils.index_utils import (
     extract_file_info,
     format_filename,
     get_file_title,

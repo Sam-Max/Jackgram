@@ -4,8 +4,8 @@ from pyrogram import Client, utils, raw
 from pyrogram.session import Session, Auth
 from pyrogram.errors import AuthBytesInvalid
 from pyrogram.file_id import FileId, FileType, ThumbnailSource
-from streamtg.server.exceptions import FileNotFound
-from streamtg.utils.file_properties import get_file_ids
+from jackgram.server.exceptions import FileNotFound
+from jackgram.utils.file_properties import get_file_ids
 
 
 class ByteStreamer:

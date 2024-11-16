@@ -3,8 +3,8 @@ import asyncio
 import logging
 import traceback
 import logging.handlers as handlers
-from streamtg.server import web_server
-from streamtg.bot import BIND_ADDRESS, PORT, SESSION_STRING, StreamBot, StreamUser
+from jackgram.server import web_server
+from jackgram.bot import BIND_ADDRESS, PORT, SESSION_STRING, StreamBot, StreamUser
 from aiohttp import web
 from pyrogram import idle
 

@@ -1,14 +1,14 @@
 from asyncio import sleep
 import json
 import os
-from streamtg.bot import SECRET_KEY, get_db, StreamBot, StreamUser
+from jackgram.bot import SECRET_KEY, get_db, StreamBot, StreamUser
 from pyrogram import filters, Client
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 import requests
-from streamtg.bot.index import index_channel
-from streamtg.utils.bot_utils import generate_link
-from streamtg.utils.utils import extract_movie_info, extract_show_info_raw
+from jackgram.bot.index import index_channel
+from jackgram.utils.bot_utils import generate_link
+from jackgram.utils.utils import extract_movie_info, extract_show_info_raw
 import datetime
 import jwt
 

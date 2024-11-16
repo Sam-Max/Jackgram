@@ -2,8 +2,8 @@ import asyncio
 import logging
 import PTN
 from pyrogram.errors import FloodWait
-from streamtg.bot import LOGS_CHANNEL
-from streamtg.utils.index_utils import (
+from jackgram.bot import LOGS_CHANNEL
+from jackgram.utils.index_utils import (
     extract_file_info,
     format_filename,
     get_file_title,

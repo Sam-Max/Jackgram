@@ -3,7 +3,7 @@ from os import getenv
 from pyrogram import Client
 from dotenv import load_dotenv
 
-from streamtg.utils.database import Database
+from jackgram.utils.database import Database
 
 plugins = {"root": "streamtg/bot/plugins"}
 no_updates = None

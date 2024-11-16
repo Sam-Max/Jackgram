@@ -1,7 +1,7 @@
 import motor.motor_asyncio
 from bson.objectid import ObjectId
 from bson.errors import InvalidId
-from streamtg.server.exceptions import FileNotFound
+from jackgram.server.exceptions import FileNotFound
 from pymongo.errors import DuplicateKeyError
 from pymongo import DESCENDING
 

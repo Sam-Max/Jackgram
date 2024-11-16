@@ -3,7 +3,7 @@ from pyrogram.enums import ChatType
 from pyrogram.types import Message
 from pyrogram.file_id import FileId
 from pyrogram.types import Message
-from streamtg.bot import BASE_URL
+from jackgram.bot import BASE_URL
 
 
 def get_file_info(message):

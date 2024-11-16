@@ -4,8 +4,8 @@ from typing import Any, Optional
 from pyrogram.enums import ChatType
 from pyrogram.types import Message
 from pyrogram.file_id import FileId
-from streamtg.bot import get_db
-from streamtg.utils.utils import extract_media_by_hash
+from jackgram.bot import get_db
+from jackgram.utils.utils import extract_media_by_hash
 
 
 db = get_db()
