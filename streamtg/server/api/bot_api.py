@@ -2,6 +2,7 @@ from aiohttp import web
 from streamtg.bot import get_db
 from streamtg.utils.utils import (
     extract_movie_info,
+    extract_movie_info_raw,
     extract_show_info,
     extract_show_info_raw,
 )
@@ -61,7 +62,7 @@ async def stream_series(request):
 # http://127.0.0.1:8080/search?query="From"&page=1
 @routes.get("/search", allow_head=True)
 async def search_handler(request: web.Request):
-    try:
+    # try:
         search_query = request.query.get("query")
         page = int(request.query.get("page", 1))
 
@@ -77,24 +78,22 @@ async def search_handler(request: web.Request):
 
         results, total_count = await db.search_tmdb(search_query, page)
         if results:
-            results_list = []
+            media_info = []
             for result in results:
-                tmdb_id = result["tmdb_id"]
                 if result["type"] == "movie":
-                    result = extract_movie_info(result)
+                    data = extract_movie_info_raw(result)
                 else:
-                    result = extract_show_info_raw(result)
-                results_list.append(result)
+                    data = extract_show_info_raw(result)
+                media_info.append(data)
 
             return web.json_response(
                 {
-                    "tmdb_id": tmdb_id,
                     "page": page,
                     "total_count": total_count,
-                    "results": results_list,
+                    "results": media_info,
                 }
             )
         else:
             return web.json_response({"error": "Item not found"}, status=404)
-    except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+    # except Exception as e:
+    #     return web.json_response({"error": str(e)}, status=500)

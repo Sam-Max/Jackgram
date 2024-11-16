@@ -2,12 +2,18 @@ import re
 
 
 def extract_show_info_raw(data):
-    show_info = []
+    show_info = {
+        "tmdb_id": data.get("tmdb_id"),
+        "type": data.get("type"),
+        "country": data.get("origin_country")[0],
+        "language": data.get("original_language"),
+        "files": [],
+    }
     for season in data.get("seasons", []):
         for episode in season.get("episodes", []):
             for info in episode["file_info"]:
                 episode_info = {
-                    "tracker": "Telegram",
+                    "name": "Telegram",
                     "title": info.get("file_name"),
                     "date": episode.get("date"),
                     "duration": episode.get("duration"),
@@ -15,8 +21,7 @@ def extract_show_info_raw(data):
                     "size": info.get("file_size"),
                     "hash": info.get("hash"),
                 }
-
-                show_info.append(episode_info)
+                show_info["files"].append(episode_info)
     return show_info
 
 
@@ -28,7 +33,7 @@ def extract_show_info(data, season_num, episode_num):
                 if episode.get("episode_number") == int(episode_num):
                     for info in episode["file_info"]:
                         episode_info = {
-                            "tracker": "Telegram",
+                            "name": "Telegram",
                             "title": info.get("file_name"),
                             "date": episode.get("date"),
                             "duration": episode.get("duration"),
@@ -38,6 +43,48 @@ def extract_show_info(data, season_num, episode_num):
                         }
                         show_info.append(episode_info)
     return show_info
+
+
+def extract_movie_info(data):
+    movie_info = []
+    release_date = data.get("release_date")
+    runtime = data.get("runtime")
+
+    for info in data["file_info"]:
+        file_info = {
+            "name": "Telegram",
+            "title": info.get("file_name"),
+            "date": release_date,
+            "duration": runtime,
+            "quality": info.get("quality"),
+            "size": info.get("file_size"),
+            "hash": info.get("hash"),
+        }
+        movie_info.append(file_info)
+    return movie_info
+
+
+
+def extract_movie_info_raw(data):
+    movie_info = {
+        "tmdb_id": data.get("tmdb_id"),
+        "type": data.get("type"),
+        "country": data.get("origin_country")[0],
+        "language": data.get("original_language"),
+        "date": data.get("release_date"),
+        "duration": data.get("runtime"),
+        "files": [],
+    }
+    for info in data["file_info"]:
+        files_info = {
+            "name": "Telegram",
+            "title": info.get("file_name"),
+            "quality": info.get("quality"),
+            "size": info.get("file_size"),
+            "hash": info.get("hash"),
+        }
+        movie_info["files"].append(files_info)
+    return movie_info
 
 
 async def extract_media_by_hash(data, hash):
@@ -51,25 +98,6 @@ async def extract_media_by_hash(data, hash):
         for info in data["file_info"]:
             if info.get("hash") == hash:
                 return info
-
-
-def extract_movie_info(data):
-    movie_info = []
-    release_date = data.get("release_date")
-    runtime = data.get("runtime")
-
-    for info in data["file_info"]:
-        file_info = {
-            "tracker": "Telegram",
-            "title": info.get("file_name"),
-            "date": release_date,
-            "duration": runtime,
-            "quality": info.get("quality"),
-            "size": info.get("file_size"),
-            "hash": info.get("hash"),
-        }
-        movie_info.append(file_info)
-    return movie_info
 
 
 def clean_file_name(name: str) -> str:

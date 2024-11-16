@@ -1,7 +1,6 @@
 import re
 from streamtg.bot import get_db
 from streamtg.utils.tmdb import get_tmdb
-from streamtg.utils.utils import get_readable_size
 import PTN
 
 
@@ -80,10 +79,9 @@ async def process_series(media_id, data, series_details, episode_details, file_i
         "tmdb_id": series_details.get("id"),
         "title": series_details.get("name"),
         "rating": series_details.get("vote_average"),
-        "description": series_details.get("overview"),
         "release_date": series_details.get("first_air_date"),
-        "poster": series_details.get("poster_path"),
-        "backdrop": series_details.get("backdrop_path"),
+        "origin_country": series_details.get("origin_country"),
+        "original_language": series_details.get("original_language"),
         "type": "tv",
         "genres": genres,
         "seasons": [
@@ -97,8 +95,6 @@ async def process_series(media_id, data, series_details, episode_details, file_i
                         "date": episode_details.get("air_date"),
                         "duration": episode_details.get("runtime"),
                         "title": episode_details.get("name"),
-                        "description": series_details.get("overview"),
-                        "poster": series_details.get("still_path"),
                         "rating": series_details.get("vote_average"),
                         "file_info": [file_info],
                     }
@@ -121,11 +117,10 @@ async def process_movie(media_id, media_details, file_info):
         "tmdb_id": media_details.get("id"),
         "title": media_details.get("title"),
         "rating": media_details.get("vote_average"),
-        "description": media_details.get("overview"),
         "runtime": media_details.get("runtime"),
         "release_date": media_details.get("release_date"),
-        "poster": media_details.get("poster_path"),
-        "backdrop": media_details.get("backdrop_path"),
+        "origin_country": media_details.get("origin_country"),
+        "original_language": media_details.get("original_language"),
         "genres": genres,
         "type": "movie",
         "file_info": [file_info],
