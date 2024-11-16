@@ -1,4 +1,4 @@
-### A python bot and web server with an API Rest, that indexes telegram channels videos files and serve the information through its API to build an url for stream or download.
+### A telegram bot and web server with an API Rest, that indexes telegram channels videos files and serve the information through its API to build an url for stream or download.
 
 ## **Features**
 
@@ -7,7 +7,7 @@
 - Stream and download video files using an API endpoint
 - Database support
 
-## **Api Endpoints and Schema**
+## **Api Endpoints**
 
 ### GET /stream/series
 
@@ -109,18 +109,18 @@
 
 Add the following environment variables to your config.env file.
 
-`API_ID` (required) | Telegram api_id obtained from https://my.telegram.org/apps. `int`
-`API_HASH` (required) | Telegram api_hash obtained from https://my.telegram.org/apps. `str`
-`BOT_TOKEN` (required) | The Telegram Bot Token that you got from @BotFather `str`
-`DATABASE_URL` (required) | Your Mongo Database URL (Connection string). `str`
-`SESSION_STRING` | Use same account which is a participant of the channels to index.
-`LOGS_CHANNEL` | Channel where the indexed video files will be saved. `int`
-`TMDB_API` = | API token for tmdb authentification. `str`
-`TMDB_LANGUAGE` | Language for tmdb metadata. Default: "en-US". `str`
-`BASE_URL` (required) | Valid BASE URL where the bot is deployed. Format of URL should be `http://myip`, where myip is the IP/Domain(public) of your bot. `str`
-`PORT` | Port on which app should listen to, defaults to `8080`. `int`
-`SECRET_KEY` | Secret key for encrypt and decrypt authentification tokens. `str`
-`SLEEP_THRESHOLD` | Set a sleep threshold for flood wait exceptions, defaut is `60`. `int`
+- `API_ID`: (required) | Telegram api_id obtained from https://my.telegram.org/apps. `int`
+- `API_HASH`: (required) | Telegram api_hash obtained from https://my.telegram.org/apps. `str`
+- `BOT_TOKEN`: (required) | The Telegram Bot Token that you got from @BotFather `str`
+- `DATABASE_URL`:(required) | Your Mongo Database URL (Connection string). `str`
+- `SESSION_STRING`: | Use same account which is a participant of the channels to index.
+- `LOGS_CHANNEL`: | Channel where the indexed video files will be saved. `int`
+- `TMDB_API`: | API token for tmdb authentification. `str`
+- `TMDB_LANGUAGE`: | Language for tmdb metadata. Default: "en-US". `str`
+- `BASE_URL`: (required) | Valid BASE URL where the bot is deployed. Format of URL should be `http://myip`, where myip is the IP/Domain(public) of your bot. `str`
+- `PORT`: | Port on which app should listen to, defaults to `8080`. `int`
+- `SECRET_KEY`: | Secret key for encrypt and decrypt authentification tokens. `str`
+- `SLEEP_THRESHOLD`: | Set a sleep threshold for flood wait exceptions, defaut is `60`. `int`
 
 ### **Generate Database**
 
@@ -149,4 +149,4 @@ del_db - Delete a db by name
 
 ## **Contact Info**
 
-[![Telegram Username](https://img.shields.io/static/v1?label=&message=Telegram%20&color=blueviolet&style=for-the-badge&logo=telegram&logoColor=black)](https://t.me/sam-max)
+[![Telegram Username](https://img.shields.io/static/v1?label=&message=Telegram%20&color=blueviolet&style=for-the-badge&logo=telegram&logoColor=black)](https://t.me/sammax09)
