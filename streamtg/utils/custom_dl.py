@@ -22,12 +22,12 @@ class ByteStreamer:
         or it'll generate the properties from the Message ID and cache them.
         """
 
-        if hash not in self.__cached_file_ids:
+        if secure_hash not in self.__cached_file_ids:
             file_id = await get_file_ids(tmdb_id, secure_hash)
             if not file_id:
                 raise FileNotFound
-            self.__cached_file_ids[hash] = file_id
-        return self.__cached_file_ids[hash]
+            self.__cached_file_ids[secure_hash] = file_id
+        return self.__cached_file_ids[secure_hash]
     
     async def yield_file(
         self,
