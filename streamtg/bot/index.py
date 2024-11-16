@@ -16,6 +16,7 @@ from streamtg.utils.index_utils import (
 async def fetch_message(client, chat_id, message_id):
     try:
         message = await client.get_messages(chat_id, message_id)
+        print(message)
         if file := message.video or message.document:
             return await send_message(client, message, file, LOGS_CHANNEL)
     except FloodWait as e:
@@ -44,23 +45,32 @@ async def index_channel(
                 min(current_message_id + batch_size, last_message_id + 1),
             )
         )
-
         for message_id in batch_message_ids:
-            message = await fetch_message(client, chat_id, message_id)
-            if message:
-                file = message.video or message.document
-                title = get_file_title(file, message)
-                filename = format_filename(title)
-                file_info = await extract_file_info(file, message, filename)
+            try:
+                message = await fetch_message(client, chat_id, message_id)
+                if message:
+                    file = message.video or message.document
+                    title = get_file_title(file, message)
+                    filename = format_filename(title)
+                    file_info = await extract_file_info(file, message, filename)
 
-                data = PTN.parse(filename)
-                media_id, media_details, episode_details = await get_media_details(data)
-
-                if "season" in data and "episode" in data:
-                    await process_series(
-                        media_id, data, media_details, episode_details, file_info
+                    data = PTN.parse(filename)
+                    media_id, media_details, episode_details = await get_media_details(
+                        data
                     )
-                else:
-                    await process_movie(media_id, media_details, file_info)
-            await asyncio.sleep(1)
+
+                    if media_id and media_details:
+                        if "season" in data and "episode" in data:
+                            await process_series(
+                                media_id,
+                                data,
+                                media_details,
+                                episode_details,
+                                file_info,
+                            )
+                        else:
+                            await process_movie(media_id, media_details, file_info)
+                await asyncio.sleep(1)
+            except Exception as e:
+                print(f"Error: {e}")
         current_message_id += batch_size
