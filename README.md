@@ -6,6 +6,7 @@
 - API Rest with auth token system.
 - Stream and download video files using an API endpoint
 - Database support
+- Tmdb API support
 
 ## **Api Endpoints**
 
@@ -14,7 +15,7 @@
 - **Request:**
 
   - Method: `GET`
-  - URL: `/stream/series/`
+  - URL: `/stream/series/{tmdb_id}:{season}:{episode}.json`
   - Headers:
     - `Authorization: Bearer <token>`
 
@@ -43,7 +44,7 @@
 - **Request:**
 
   - Method: `GET`
-  - URL: `/stream/movie/`
+  - URL: `/stream/movie/{tmdb_id}.json`
   - Headers:
     - `Authorization: Bearer <token>`
 
@@ -72,7 +73,7 @@
 - **Request:**
 
   - Method: `GET`
-  - URL: `/search/`
+  - URL: `/search?query=value1&page=value2`
   - Headers:
     - `Authorization: Bearer <token>`
 
