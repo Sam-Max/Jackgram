@@ -8,13 +8,6 @@ db = get_db()
 tmdb = get_tmdb()
 
 
-async def get_auth_channel():
-    AUTH_CHANNEL = await db.get_variable("auth_channel")
-    if AUTH_CHANNEL is None or AUTH_CHANNEL.strip() == "":
-        return [AUTH_CHANNEL]
-    return [channel.strip() for channel in AUTH_CHANNEL.split(",")]
-
-
 def get_file_title(file, message):
     title = file.file_name or message.caption or file.file_id
     return title.replace("_", " ").replace(".", " ")
