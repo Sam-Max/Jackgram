@@ -1,4 +1,3 @@
-import time
 import motor.motor_asyncio
 from bson.objectid import ObjectId
 from bson.errors import InvalidId
@@ -9,8 +8,8 @@ from pymongo import DESCENDING
 
 class Database:
     def __init__(self, uri, database_name):
-        self._client = motor.motor_asyncio.AsyncIOMotorClient(uri)
-        self.db = self._client[database_name]
+        self.client = motor.motor_asyncio.AsyncIOMotorClient(uri)
+        self.db = self.client[database_name]
         self.col = self.db.users
         self.file_collection = self.db.file
         self.tmdb_collection = self.db.tmdb
@@ -43,6 +42,12 @@ class Database:
 
     async def del_tdmb(self, tmdb_id):
         return await self.tmdb_collection.delete_one({"tmdb_id": int(tmdb_id)})
+
+    async def count_tmdb(self):
+        return await self.tmdb_collection.count_documents({"tmdb_id": { "$exists": True } })
+    
+    async def list_collections(self):
+        return await self.db.list_collection_names()
 
     async def search_tmdb(self, query, page=1, per_page=50):
         words = query.split()

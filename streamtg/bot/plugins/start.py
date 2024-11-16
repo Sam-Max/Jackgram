@@ -1,4 +1,6 @@
 from asyncio import sleep
+import json
+import os
 from streamtg.bot import SECRET_KEY, get_db, StreamBot, StreamUser
 from pyrogram import filters, Client
 from pyrogram.errors import FloodWait
@@ -89,10 +91,10 @@ async def search(bot: Client, message: Message):
 
         results_list = "Results:\n\n"
         count = 0
-        for i in info:
+        for i in info["files"]:
             count += 1
             name = i["title"]
-            link = generate_link(tmdb_id=results[0]["tmdb_id"], hash=i["hash"])
+            link = generate_link(tmdb_id=info["tmdb_id"], hash=i["hash"])
             results_list += f"{count}. [{name}]({link})\n"
 
         await message.reply_text(results_list)
@@ -117,11 +119,59 @@ async def delete(bot: Client, message: Message):
         await message.reply_text("No document found with the given criteria")
 
 
+@StreamBot.on_message(filters.command("count") & filters.private)
+async def count(bot: Client, message: Message):
+    result = await db.count_tmdb()
+    if result > 0:
+        await message.reply_text(
+            f"There are {result} number of entries on the database"
+        )
+    else:
+        await message.reply_text("No document found with the given criteria")
+
+
+@StreamBot.on_message(filters.command("save_db") & filters.private)
+async def save_database(bot: Client, message: Message):
+    backup_dir = "./database"
+    os.makedirs(backup_dir, exist_ok=True)
+
+    collections = await db.list_collections()
+    for collection_name in collections:
+        collection = db.db[collection_name]
+        cursor = collection.find({})
+        data = await cursor.to_list(length=None)
+
+        for doc in data:
+            doc["_id"] = str(doc["_id"])
+
+        with open(os.path.join(backup_dir, f"{collection_name}.json"), "w") as file:
+            json.dump(data, file, indent=4)
+
+    await message.reply_text(
+        f"Backup completed! Data saved in '{backup_dir}' directory."
+    )
+
+
+@StreamBot.on_message(filters.command("del_db") & filters.private)
+async def delete_database(bot: Client, message: Message):
+    args = message.text.split()[1:]
+    if len(args) == 1:
+        database_name = args[0]
+    else:
+        await message.reply(text="Use /del_db name")
+        return
+
+    await db.client.drop_database(database_name)
+
+    await message.reply_text(f"Database '{database_name}' has been deleted.")
+
+
 @StreamBot.on_message(filters.command("token") & filters.private)
 async def generate_token(client, message):
     payload = {
         "user_id": message.user.id,
-        "exp": datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=24),  # Token expiration
+        "exp": datetime.now(datetime.timezone.utc)
+        + datetime.timedelta(hours=24),  # Token expiration
     }
 
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
