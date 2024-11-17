@@ -25,7 +25,7 @@ logging.basicConfig(
     ],
 )
 
-bot_logger = logging.getLogger("streamtg").setLevel(logging.DEBUG)
+bot_logger = logging.getLogger("jackgram").setLevel(logging.DEBUG)
 
 server = web.AppRunner(web_server())
 

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from jackgram.utils.database import Database
 
-plugins = {"root": "streamtg/bot/plugins"}
+plugins = {"root": "jackgram/bot/plugins"}
 no_updates = None
 
 load_dotenv('config.env', override=True)

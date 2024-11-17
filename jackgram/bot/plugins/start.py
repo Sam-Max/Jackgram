@@ -18,7 +18,7 @@ db = get_db()
 
 @StreamBot.on_message(filters.command("start") & filters.private)
 async def start(bot: Client, message: Message):
-    await message.reply_text("Welcome to StreamTGBot!!.")
+    await message.reply_text("Welcome to JackgramBot!!.")
 
 
 @StreamBot.on_message(filters.command("index") & filters.private)
