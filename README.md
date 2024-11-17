@@ -106,6 +106,22 @@
     }
     ```
 
+  ### GET /dl
+
+- **Request:**
+
+  - Method: `GET`
+  - URL: `/dl/{tmdb_id}?hash=XXXXXX
+  - Headers:
+    - `Authorization: Bearer <token>`
+
+- **Response:**
+  - Status: 
+    - `200 OK`: Full file download when no `Range` header is provided.
+    - `206 Partial Content`: Partial file download when a valid `Range` header is included.
+  - Body: Binary content of the requested media file or portion of it.
+  
+
 ## **Env Variables**
 
 Add the following environment variables to your config.env file.
