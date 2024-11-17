@@ -106,12 +106,12 @@
     }
     ```
 
-  ### GET /dl
+### GET /dl
 
 - **Request:**
 
   - Method: `GET`
-  - URL: `/dl/{tmdb_id}?hash=XXXXXX
+  - URL: `/dl/{tmdb_id}?hash=XXXXXX`
   - Headers:
     - `Authorization: Bearer <token>`
 
