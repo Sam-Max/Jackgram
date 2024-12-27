@@ -1,0 +1,35 @@
+services:
+  mongo:
+    image: mongo:6.0
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+    ports:
+      - "27017:27017"
+    networks:
+      - jackgram_network
+    volumes:
+      - mongo_data:/data/db
+
+  app:
+    build: .
+    container_name: jackgram
+    command: bash start.sh
+    depends_on:
+      - mongo
+    ports:
+      - "5000:5000"
+    networks:
+      - jackgram_network
+
+volumes:
+  mongo_data:
+
+networks:
+  jackgram_network:
+    driver: bridge
+
+
+ 
+
