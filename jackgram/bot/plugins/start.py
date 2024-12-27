@@ -42,7 +42,7 @@ async def index(bot: Client, message: Message):
             )
             return
     else:
-        await message.reply(text="Use /index chat_id first_id last_id client_type")
+        await message.reply(text="Use /index chat_id first_id last_id client(bot or user)")
         return
 
     try:
