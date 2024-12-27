@@ -8,11 +8,11 @@ API_HASH = ""  # Replace with your actual API hash
 
 async def generate_session_string():
     async with Client(
-        name="StreamGram-User", api_id=API_KEY, api_hash=API_HASH, in_memory=True
+        name="Jackgram-User", api_id=API_KEY, api_hash=API_HASH, in_memory=True
     ) as app:
         session = await app.export_session_string()
         try:
-            await app.send_message("me", f"#StreamGram\n\n<code>{session}</code>")
+            await app.send_message("me", f"#Jackgram\n\n<code>{session}</code>")
         except UserIsBot:
             pass
         print(f"Done!!, String Session: {session}")
