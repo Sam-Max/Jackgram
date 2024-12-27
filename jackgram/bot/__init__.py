@@ -49,5 +49,5 @@ StreamUser = Client(
 
 
 def get_db():
-    return Database(DATABASE_URL, "streamtgdb")
+    return Database(DATABASE_URL, "jackgramdb")
 
