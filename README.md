@@ -120,41 +120,40 @@
     - `200 OK`: Full file download when no `Range` header is provided.
     - `206 Partial Content`: Partial file download when a valid `Range` header is included.
   - Body: Binary content of the requested media file or portion of it.
-  
 
-## **Env Variables**
+## Setting up config file.
+
+cp config_sample.env config.env
+
+## Fill up Env Variables.
 
 Add the following environment variables to your config.env file.
 
 - `API_ID`: (required) | Telegram api_id obtained from https://my.telegram.org/apps. `int`
 - `API_HASH`: (required) | Telegram api_hash obtained from https://my.telegram.org/apps. `str`
 - `BOT_TOKEN`: (required) | The Telegram Bot Token that you got from @BotFather `str`
-- `DATABASE_URL`:(required) | Your Mongo Database URL (Connection string). `str`
-- `SESSION_STRING`: | Use same account which is a participant of the channels to index.
+- `DATABASE_URL`:(required) | Your Mongo Database URL (Connection string). `str`. Default: `mongodb://admin:admin@mongo:27017`.
+- `SESSION_STRING`: | Use same account which is a participant of the channels to index (necessary to index private channels)
 - `LOGS_CHANNEL`: | Channel where the indexed video files will be saved. `int`
 - `TMDB_API`: | API token for tmdb authentification. `str`
 - `TMDB_LANGUAGE`: | Language for tmdb metadata. Default: "en-US". `str`
 - `BASE_URL`: (required) | Valid BASE URL where the bot is deployed. Format of URL should be `http://myip`, where myip is the IP/Domain(public) of your bot. `str`
-- `PORT`: | Port on which app should listen to, defaults to `8080`. `int`
+- `PORT`: | Port on which app should listen to, defaults to `5000`. `int`
 - `SECRET_KEY`: | Secret key for encrypt and decrypt authentification tokens. `str`
 - `SLEEP_THRESHOLD`: | Set a sleep threshold for flood wait exceptions, defaut is `60`. `int`
 
-### **Generate Database**
 
-1. Go to `https://mongodb.com/` and sign-up.
-2. Create Shared Cluster.
-3. Press on `Database` under `Deployment` Header, your created cluster will be there.
-4. Press on connect, choose `Allow Access From Anywhere` and press on `Add IP Address` without editing the ip, then
-   create user.
-5. After creating user press on `Choose a connection`, then press on `Connect your application`. Choose `Driver`
-   **python** and `version` **3.6 or later**.
-6. Copy your `connection string` and replace `<password>` with the password of your user, then press close.
+ Your Mongo Database URL (Connection string).
+
+### **Running using Docker Compose**
+
+docker-compose up -d
 
 ### Bot Commands
 
 ```
 start - Welcome message
-index - Store files of a channel in the db
+index - Store files of an specific channel in the db
 search - Search a file on db by name
 del - Delete a file on the db
 count - Count all files on the db
