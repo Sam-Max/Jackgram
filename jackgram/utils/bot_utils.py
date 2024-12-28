@@ -3,7 +3,6 @@ from pyrogram.enums import ChatType
 from pyrogram.types import Message
 from pyrogram.file_id import FileId
 from pyrogram.types import Message
-from jackgram.bot import BASE_URL
 
 
 def get_file_info(message):
@@ -71,10 +70,3 @@ def get_name(media_msg):
         file_name = f"{media_type}-{date}{ext}"
 
     return file_name
-
-
-def generate_link(tmdb_id, hash):
-    return f"{BASE_URL}dl/{tmdb_id}?hash={hash}"
-
-def generate_telegram_link(channel_id, msg_id):
-    return f"https://t.me/{StreamBot.me.username}?start=file_{msg_id}"

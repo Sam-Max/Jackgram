@@ -7,8 +7,11 @@ from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 import requests
 from jackgram.bot.index import index_channel
-from jackgram.utils.bot_utils import generate_link
-from jackgram.utils.utils import extract_movie_info, extract_show_info_raw
+from jackgram.utils.utils import (
+    extract_movie_info,
+    extract_show_info_raw,
+    generate_stream_url,
+)
 import datetime
 import jwt
 
@@ -18,7 +21,7 @@ db = get_db()
 
 @StreamBot.on_message(filters.command("start") & filters.private)
 async def start(bot: Client, message: Message):
-    await message.reply_text("Welcome to JackgramBot!!.")
+    await message.reply_text("Welcome to JackgramBot!!. Click /index for more information")
 
 
 @StreamBot.on_message(filters.command("index") & filters.private)
@@ -42,7 +45,9 @@ async def index(bot: Client, message: Message):
             )
             return
     else:
-        await message.reply(text="Use /index chat_id first_id last_id client(bot or user)")
+        await message.reply(
+            text="Use /index chat_id first_id last_id client(bot or user)"
+        )
         return
 
     try:
@@ -94,7 +99,7 @@ async def search(bot: Client, message: Message):
         for i in info["files"]:
             count += 1
             name = i["title"]
-            link = generate_link(tmdb_id=info["tmdb_id"], hash=i["hash"])
+            link = generate_stream_url(tmdb_id=info["tmdb_id"], hash=i["hash"])
             results_list += f"{count}. [{name}]({link})\n"
 
         await message.reply_text(results_list)

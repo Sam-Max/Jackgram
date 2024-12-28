@@ -21,7 +21,7 @@ AUTH_USERS = list(set(int(x) for x in str(getenv("AUTH_USERS", "")).split()))
 
 # WebServer
 PORT = int(getenv("PORT", 8080))
-BASE_URL = "http://127.0.0.1:{}/".format(str(PORT))
+BASE_URL = "http://127.0.0.1:{}".format(str(PORT))
 BIND_ADDRESS = str(getenv("BIND_ADDRESS", "0.0.0.0"))
 SECRET_KEY = str(getenv("SECRET_KEY", ""))
 PING_INTERVAL = int(getenv("PING_INTERVAL", "1200"))

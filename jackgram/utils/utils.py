@@ -1,3 +1,4 @@
+from jackgram.bot import BASE_URL
 import re
 
 
@@ -19,13 +20,15 @@ def extract_show_info_raw(data):
                     "duration": episode.get("duration"),
                     "quality": info.get("quality"),
                     "size": info.get("file_size"),
-                    "hash": info.get("hash"),
+                    "url": generate_stream_url(
+                        tmdb_id=data.get("tmdb_id"), hash=info.get("hash")
+                    ),
                 }
                 show_info["files"].append(episode_info)
     return show_info
 
 
-def extract_show_info(data, season_num, episode_num):
+def extract_show_info(data, season_num, episode_num, tmdb_id):
     show_info = []
     for season in data.get("seasons", []):
         if season.get("season_number") == int(season_num):
@@ -39,13 +42,15 @@ def extract_show_info(data, season_num, episode_num):
                             "duration": episode.get("duration"),
                             "quality": info.get("quality"),
                             "size": info.get("file_size"),
-                            "hash": info.get("hash"),
+                            "url": generate_stream_url(
+                                tmdb_id=tmdb_id, hash=info.get("hash")
+                            ),
                         }
                         show_info.append(episode_info)
     return show_info
 
 
-def extract_movie_info(data):
+def extract_movie_info(data, tmdb_id):
     movie_info = []
     release_date = data.get("release_date")
     runtime = data.get("runtime")
@@ -58,11 +63,10 @@ def extract_movie_info(data):
             "duration": runtime,
             "quality": info.get("quality"),
             "size": info.get("file_size"),
-            "hash": info.get("hash"),
+            "url": generate_stream_url(tmdb_id=tmdb_id, hash=info.get("hash")),
         }
         movie_info.append(file_info)
     return movie_info
-
 
 
 def extract_movie_info_raw(data):
@@ -81,7 +85,9 @@ def extract_movie_info_raw(data):
             "title": info.get("file_name"),
             "quality": info.get("quality"),
             "size": info.get("file_size"),
-            "hash": info.get("hash"),
+            "url": generate_stream_url(
+                tmdb_id=data.get("tmdb_id"), hash=info.get("hash")
+            ),
         }
         movie_info["files"].append(files_info)
     return movie_info
@@ -155,3 +161,7 @@ def get_readable_time(seconds: int) -> str:
     time_list.reverse()
     readable_time += ": ".join(time_list)
     return readable_time
+
+
+def generate_stream_url(tmdb_id, hash):
+    return f"{BASE_URL}/dl/{tmdb_id}?hash={hash}"

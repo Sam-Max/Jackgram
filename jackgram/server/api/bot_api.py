@@ -27,7 +27,7 @@ async def stream_series(request):
         return web.json_response({"error": "Item not found"}, status=404)
 
     if data.get("type") == "tv":
-        info = extract_show_info(data, season, episode)
+        info = extract_show_info(data, season, episode, tmdb_id)
 
         return web.json_response(
             {
@@ -49,7 +49,7 @@ async def stream_series(request):
         return web.json_response({"error": "Item not found"}, status=404)
 
     if data.get("type") == "movie":
-        info = extract_movie_info(data)
+        info = extract_movie_info(data, tmdb_id)
 
         return web.json_response(
             {
@@ -62,7 +62,7 @@ async def stream_series(request):
 # http://127.0.0.1:8080/search?query="From"&page=1
 @routes.get("/search", allow_head=True)
 async def search_handler(request: web.Request):
-    # try:
+    try:
         search_query = request.query.get("query")
         page = int(request.query.get("page", 1))
 
@@ -95,5 +95,5 @@ async def search_handler(request: web.Request):
             )
         else:
             return web.json_response({"error": "Item not found"}, status=404)
-    # except Exception as e:
-    #     return web.json_response({"error": str(e)}, status=500)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)

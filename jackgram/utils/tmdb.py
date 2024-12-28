@@ -58,7 +58,7 @@ class TMDBClient:
             return None
 
         if use_api:
-            logging.info("Trying search using API for '%s'", title)
+            logging.info("Searching using Tmdb API for: '%s'", title)
             type_name = "tv" if data_type == "series" else "movie"
 
             def search_tmdb(query_year):
@@ -88,7 +88,7 @@ class TMDBClient:
                     results = resp.json().get("results", [])
 
                 if results:
-                    logging.debug(f"Search results for '{title}': {results}")
+                    logging.info(f"Results found for {title}: {results}")
                     return results[0]["id"]
 
                 else:
