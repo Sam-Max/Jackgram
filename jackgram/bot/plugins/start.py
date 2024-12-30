@@ -1,19 +1,23 @@
 from asyncio import sleep
 import json
 import os
-from jackgram.bot import SECRET_KEY, get_db, StreamBot, StreamUser
+import datetime
+import jwt
+import requests
+
+from bson.objectid import ObjectId
+
 from pyrogram import filters, Client
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message
-import requests
+
+from jackgram.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot, StreamUser
 from jackgram.bot.index import index_channel
 from jackgram.utils.utils import (
     extract_movie_info,
     extract_show_info_raw,
     generate_stream_url,
 )
-import datetime
-import jwt
 
 session = requests.Session()
 db = get_db()
@@ -137,9 +141,9 @@ async def count(bot: Client, message: Message):
 
 @StreamBot.on_message(filters.command("save_db") & filters.private)
 async def save_database(bot: Client, message: Message):
-    backup_dir = "./database"
-    os.makedirs(backup_dir, exist_ok=True)
+    os.makedirs(BACKUP_DIR, exist_ok=True)
 
+    backup_data = {}
     collections = await db.list_collections()
     for collection_name in collections:
         collection = db.db[collection_name]
@@ -149,12 +153,56 @@ async def save_database(bot: Client, message: Message):
         for doc in data:
             doc["_id"] = str(doc["_id"])
 
-        with open(os.path.join(backup_dir, f"{collection_name}.json"), "w") as file:
-            json.dump(data, file, indent=4)
+        backup_data[collection_name] = data
+
+    backup_file = os.path.join(BACKUP_DIR, "database_backup.json")
+    with open(backup_file, "w") as file:
+        json.dump(backup_data, file, indent=4)
 
     await message.reply_text(
-        f"Backup completed! Data saved in '{backup_dir}' directory."
+        f"Backup completed! Data saved in '{backup_file}'."
     )
+
+
+@StreamBot.on_message(filters.command("load_db") & filters.private)
+async def load_database(bot: Client, message: Message):
+    if not message.reply_to_message or not message.reply_to_message.document:
+        await message.reply_text("Please reply to a JSON file with this command.")
+        return
+
+    file_path = await bot.download_media(message.reply_to_message.document)
+    if not file_path.endswith(".json"):
+        await message.reply_text("The file must be a JSON file.")
+        return
+
+    with open(file_path, "r") as file:
+        try:
+            backup_data = json.load(file)
+        except json.JSONDecodeError:
+            await message.reply_text("Failed to load the file. Please ensure it is a valid JSON file.")
+            return
+
+    if not isinstance(backup_data, dict):
+        await message.reply_text("Invalid JSON structure. The file must contain a dictionary with collection names as keys.")
+        return
+
+    for collection_name, documents in backup_data.items():
+        if not isinstance(documents, list):
+            await message.reply_text(f"Invalid data for collection '{collection_name}'. Expected a list of documents.")
+            continue
+
+        collection = db.db[collection_name]
+
+        # Insert documents into the collection
+        for document in documents:
+            if "_id" in document:
+                try:
+                    document["_id"] = ObjectId(document["_id"])
+                except Exception:
+                    document.pop("_id")  # Remove invalid _id fields if they cannot be converted
+            await collection.insert_one(document)
+
+    await message.reply_text("Database restored successfully from the uploaded file!")
 
 
 @StreamBot.on_message(filters.command("del_db") & filters.private)

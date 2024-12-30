@@ -133,6 +133,7 @@ Add the following environment variables to your config.env file.
 - `API_HASH`: (required) | Telegram api_hash obtained from https://my.telegram.org/apps. `str`
 - `BOT_TOKEN`: (required) | The Telegram Bot Token that you got from @BotFather `str`
 - `DATABASE_URL`:(required) | Your Mongo Database URL (Connection string). `str`. Default: `mongodb://admin:admin@mongo:27017`.
+- `BACKUP_DIR`: | Directory where to save the database file on json format. `str`. Default: `/app/database`.
 - `SESSION_STRING`: | Use same account which is a participant of the channels to index (necessary to index private channels)
 - `LOGS_CHANNEL`: | Channel where the indexed video files will be saved. `int`
 - `TMDB_API`: | API token for tmdb authentification. `str`
@@ -158,7 +159,8 @@ search - Search a file on db by name
 del - Delete a file on the db
 count - Count all files on the db
 token - Generate a token to authorize using API
-save_db - Save the db
+save_db - Save the db to a json file
+load_db - Load a json file backup
 del_db - Delete a db by name
 
 ```

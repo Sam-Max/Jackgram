@@ -20,6 +20,8 @@ services:
       - mongo
     ports:
       - "5000:5000"
+    volumes:
+      - ./jackgram_db:/app/database 
     networks:
       - jackgram_network
 
