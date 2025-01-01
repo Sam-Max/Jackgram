@@ -5,6 +5,7 @@ import re
 def extract_show_info_raw(data):
     show_info = {
         "tmdb_id": data.get("tmdb_id"),
+        "title": data.get("title"),
         "type": data.get("type"),
         "country": data.get("origin_country")[0],
         "language": data.get("original_language"),
@@ -16,6 +17,7 @@ def extract_show_info_raw(data):
                 episode_info = {
                     "name": "Telegram",
                     "title": info.get("file_name"),
+                    "mode": "tv",
                     "date": episode.get("date"),
                     "duration": episode.get("duration"),
                     "quality": info.get("quality"),
@@ -26,6 +28,31 @@ def extract_show_info_raw(data):
                 }
                 show_info["files"].append(episode_info)
     return show_info
+
+def extract_movie_info_raw(data):
+    movie_info = {
+        "tmdb_id": data.get("tmdb_id"),
+        "title": data.get("title"),
+        "type": data.get("type"),
+        "country": data.get("origin_country")[0],
+        "language": data.get("original_language"),
+        "date": data.get("release_date"),
+        "duration": data.get("runtime"),
+        "files": [],
+    }
+    for info in data["file_info"]:
+        files_info = {
+            "name": "Telegram",
+            "title": info.get("file_name"),
+            "mode": "movies",
+            "quality": info.get("quality"),
+            "size": info.get("file_size"),
+            "url": generate_stream_url(
+                tmdb_id=data.get("tmdb_id"), hash=info.get("hash")
+            ),
+        }
+        movie_info["files"].append(files_info)
+    return movie_info
 
 
 def extract_show_info(data, season_num, episode_num, tmdb_id):
@@ -49,7 +76,6 @@ def extract_show_info(data, season_num, episode_num, tmdb_id):
                         show_info.append(episode_info)
     return show_info
 
-
 def extract_movie_info(data, tmdb_id):
     movie_info = []
     release_date = data.get("release_date")
@@ -66,30 +92,6 @@ def extract_movie_info(data, tmdb_id):
             "url": generate_stream_url(tmdb_id=tmdb_id, hash=info.get("hash")),
         }
         movie_info.append(file_info)
-    return movie_info
-
-
-def extract_movie_info_raw(data):
-    movie_info = {
-        "tmdb_id": data.get("tmdb_id"),
-        "type": data.get("type"),
-        "country": data.get("origin_country")[0],
-        "language": data.get("original_language"),
-        "date": data.get("release_date"),
-        "duration": data.get("runtime"),
-        "files": [],
-    }
-    for info in data["file_info"]:
-        files_info = {
-            "name": "Telegram",
-            "title": info.get("file_name"),
-            "quality": info.get("quality"),
-            "size": info.get("file_size"),
-            "url": generate_stream_url(
-                tmdb_id=data.get("tmdb_id"), hash=info.get("hash")
-            ),
-        }
-        movie_info["files"].append(files_info)
     return movie_info
 
 

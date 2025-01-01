@@ -135,6 +135,7 @@ Add the following environment variables to your config.env file.
 - `DATABASE_URL`:(required) | Your Mongo Database URL (Connection string). `str`. Default: `mongodb://admin:admin@mongo:27017`.
 - `BACKUP_DIR`: | Directory where to save the database file on json format. `str`. Default: `/app/database`.
 - `SESSION_STRING`: | Use same account which is a participant of the channels to index (necessary to index private channels)
+- `WORKERS` | Number of maximum concurrent workers for handling incoming updates, default is `10`. `int`
 - `LOGS_CHANNEL`: | Channel where the indexed video files will be saved. `int`
 - `TMDB_API`: | API token for tmdb authentification. `str`
 - `TMDB_LANGUAGE`: | Language for tmdb metadata. Default: "en-US". `str`

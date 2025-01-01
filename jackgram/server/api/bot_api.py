@@ -12,6 +12,24 @@ routes = web.RouteTableDef()
 db = get_db()
 
 
+# http://127.0.0.1:8080/stream/latest
+@routes.get("/stream/latest")
+async def get_latest(request):
+    data = await db.get_latest()
+    if data is None:
+        return web.json_response({"error": "Item not found"}, status=404)
+    
+    media_info = []
+    for item in data:
+        del item["_id"]
+        if item["type"] == "movie":
+            data = extract_movie_info_raw(item)
+        else:
+            data = extract_show_info_raw(item)
+        media_info.append(data)
+
+    return web.json_response(media_info)
+    
 # http://127.0.0.1:8080/stream/series/4343434:1:1.json
 @routes.get("/stream/series/{tmdb_id}:{season}:{episode}.json")
 async def stream_series(request):

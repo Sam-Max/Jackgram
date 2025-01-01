@@ -25,7 +25,9 @@ db = get_db()
 
 @StreamBot.on_message(filters.command("start") & filters.private)
 async def start(bot: Client, message: Message):
-    await message.reply_text("Welcome to JackgramBot!!. Click /index for more information")
+    await message.reply_text(
+        "Welcome to JackgramBot!!. Click /index for more info or send a file to the logs channel to index it"
+    )
 
 
 @StreamBot.on_message(filters.command("index") & filters.private)
@@ -159,9 +161,7 @@ async def save_database(bot: Client, message: Message):
     with open(backup_file, "w") as file:
         json.dump(backup_data, file, indent=4)
 
-    await message.reply_text(
-        f"Backup completed! Data saved in '{backup_file}'."
-    )
+    await message.reply_text(f"Backup completed! Data saved in '{backup_file}'.")
 
 
 @StreamBot.on_message(filters.command("load_db") & filters.private)
@@ -179,16 +179,22 @@ async def load_database(bot: Client, message: Message):
         try:
             backup_data = json.load(file)
         except json.JSONDecodeError:
-            await message.reply_text("Failed to load the file. Please ensure it is a valid JSON file.")
+            await message.reply_text(
+                "Failed to load the file. Please ensure it is a valid JSON file."
+            )
             return
 
     if not isinstance(backup_data, dict):
-        await message.reply_text("Invalid JSON structure. The file must contain a dictionary with collection names as keys.")
+        await message.reply_text(
+            "Invalid JSON structure. The file must contain a dictionary with collection names as keys."
+        )
         return
 
     for collection_name, documents in backup_data.items():
         if not isinstance(documents, list):
-            await message.reply_text(f"Invalid data for collection '{collection_name}'. Expected a list of documents.")
+            await message.reply_text(
+                f"Invalid data for collection '{collection_name}'. Expected a list of documents."
+            )
             continue
 
         collection = db.db[collection_name]
@@ -199,7 +205,9 @@ async def load_database(bot: Client, message: Message):
                 try:
                     document["_id"] = ObjectId(document["_id"])
                 except Exception:
-                    document.pop("_id")  # Remove invalid _id fields if they cannot be converted
+                    document.pop(
+                        "_id"
+                    )  # Remove invalid _id fields if they cannot be converted
             await collection.insert_one(document)
 
     await message.reply_text("Database restored successfully from the uploaded file!")

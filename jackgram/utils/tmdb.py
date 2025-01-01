@@ -85,7 +85,7 @@ class TMDBClient:
                     results = resp.json().get("results", [])
 
                 if results:
-                    logging.info(f"Results found for {title}: {results}")
+                    logging.info(f"Results found for {title}")
                     return results[0]["id"]
 
                 else:

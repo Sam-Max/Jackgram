@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from os import getenv
 import sys
@@ -9,6 +10,7 @@ from jackgram.utils.database import Database
 
 plugins = {"root": "jackgram/bot/plugins"}
 no_updates = None
+lock = asyncio.Lock()
 
 load_dotenv("config.env", override=True)
 
@@ -23,7 +25,7 @@ API_HASH = getenv("API_HASH")
 if not API_HASH:
     logging.error("API_HASH variable is missing! Exiting now")
     sys.exit(1)
-    
+
 BOT_TOKEN = getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     logging.error("BOT_TOKEN variable is missing! Exiting now")
@@ -45,6 +47,7 @@ BACKUP_DIR = getenv("BACKUP_DIR", "/app/database")
 SLEEP_THRESHOLD = int(getenv("SLEEP_THRESHOLD", "60"))
 # AUTH_USERS = list(set(int(x) for x in str(getenv("AUTH_USERS", "")).split()))
 TMDB_LANGUAGE = getenv("TMDB_LANGUAGE", "en-US")
+WORKERS = int(getenv("WORKERS", "10"))
 
 # WebServer
 PORT = int(getenv("PORT", 5000))
@@ -65,7 +68,8 @@ StreamBot = Client(
     plugins=plugins,
     bot_token=BOT_TOKEN,
     sleep_threshold=SLEEP_THRESHOLD,
-    no_updates=no_updates,
+    workers=WORKERS,
+    max_concurrent_transmissions=1000,
 )
 
 StreamUser = Client(

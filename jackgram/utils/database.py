@@ -1,39 +1,26 @@
-import motor.motor_asyncio
-from bson.objectid import ObjectId
-from bson.errors import InvalidId
-from jackgram.server.exceptions import FileNotFound
+from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError
 from pymongo import DESCENDING
 
 
 class Database:
     def __init__(self, uri, database_name):
-        self.client = motor.motor_asyncio.AsyncIOMotorClient(uri)
+        self.client = AsyncIOMotorClient(uri, maxPoolSize=10)
         self.db = self.client[database_name]
         self.col = self.db.users
-        self.file_collection = self.db.file
         self.tmdb_collection = self.db.tmdb
 
-    async def add_file(self, file_info):
-        return (await self.file_collection.insert_one(file_info)).inserted_id
-
-    async def get_file(self, _id):
-        try:
-            file_info = await self.file_collection.find_one({"_id": ObjectId(_id)})
-            if not file_info:
-                raise FileNotFound
-            return file_info
-        except InvalidId:
-            raise FileNotFound
-
-    # TDMB
+    async def get_latest(self):
+        mydoc = self.tmdb_collection.find().sort("_id", -1).limit(20)
+        results = await mydoc.to_list()
+        return results
+    
     async def add_tmdb(self, data):
         try:
             if data.get("tmdb_id") == "null":
                 return
             await self.tmdb_collection.insert_one(data)
             print(f"Inserted new TMDB entry with ID {data.get('tmdb_id')}")
-            print(data)
         except DuplicateKeyError:
             print(f"TMDB entry with ID {data.get('tmdb_id')} already exists")
 
@@ -44,8 +31,10 @@ class Database:
         return await self.tmdb_collection.delete_one({"tmdb_id": int(tmdb_id)})
 
     async def count_tmdb(self):
-        return await self.tmdb_collection.count_documents({"tmdb_id": { "$exists": True } })
-    
+        return await self.tmdb_collection.count_documents(
+            {"tmdb_id": {"$exists": True}}
+        )
+
     async def list_collections(self):
         return await self.db.list_collection_names()
 
@@ -69,20 +58,17 @@ class Database:
 
         return results, total_count
 
-    async def update_tmdb(self, media_doc, media_type):
+    async def update_tmdb(self, existing_media, media_doc, media_type):
         tmdb_id = media_doc["tmdb_id"]
-        existing_media = await self.tmdb_collection.find_one({"tmdb_id": tmdb_id})
 
-        if existing_media:
-            if media_type == "series":
-                await self._update_series(existing_media, media_doc)
-            elif media_type == "movie":
-                await self._update_movie(existing_media, media_doc)
+        if media_type == "series":
+            print("_update_series")
+            await self._update_series(existing_media, media_doc)
+        elif media_type == "movie":
+            print("_update_movie")
+            await self._update_movie(existing_media, media_doc)
 
-            print(existing_media)
-            await self.tmdb_collection.replace_one({"tmdb_id": tmdb_id}, existing_media)
-        else:
-            await self.tmdb_collection.insert_one(media_doc)
+        await self.tmdb_collection.replace_one({"tmdb_id": tmdb_id}, existing_media)
 
     async def _update_series(self, existing_media, media_doc):
         for season in media_doc["seasons"]:

@@ -1,5 +1,5 @@
 import re
-from jackgram.bot import get_db
+from jackgram.bot import get_db, lock
 from jackgram.utils.tmdb import get_tmdb
 import PTN
 
@@ -47,10 +47,6 @@ async def get_media_details(data):
 
     if "season" in data and "episode" in data:
         media_id = tmdb.find_media_id(title=title, data_type="series", year=year)
-    else:
-        media_id = tmdb.find_media_id(title=title, data_type="movie", year=year)
-
-    if "season" in data and "episode" in data:
         episode_details = tmdb.get_episode_details(
             tmdb_id=media_id,
             episode_number=data.get("episode"),
@@ -58,6 +54,7 @@ async def get_media_details(data):
         )
     else:
         episode_details = {}
+        media_id = tmdb.find_media_id(title=title, data_type="movie", year=year)
 
     details = tmdb.get_details(
         tmdb_id=media_id, data_type="movie" if "episode" not in data else "series"
@@ -96,12 +93,14 @@ async def process_series(media_id, data, series_details, episode_details, file_i
         ],
     }
 
-    print(series_doc)
-
-    if await db.get_tmdb(tmdb_id=media_id):
-        await db.update_tmdb(series_doc, "series")
-    else:
-        await db.add_tmdb(series_doc)
+    async with lock:
+        existing_media = await db.get_tmdb(tmdb_id=media_id)
+        if existing_media:
+            print("update_tmdb")
+            await db.update_tmdb(existing_media, series_doc, "series")
+        else:
+            print("add_tmdb")
+            await db.add_tmdb(series_doc)
 
 
 async def process_movie(media_id, media_details, file_info):
@@ -119,7 +118,12 @@ async def process_movie(media_id, media_details, file_info):
         "file_info": [file_info],
     }
 
-    if await db.get_tmdb(tmdb_id=media_id):
-        await db.update_tmdb(movie_doc, "movie")
-    else:
-        await db.add_tmdb(movie_doc)
+    async with lock:
+        existing_media = await db.get_tmdb(tmdb_id=media_id)
+        if existing_media:
+            print("update_tmdb")
+            await db.update_tmdb(existing_media, movie_doc, "movie")
+        else:
+            print("add_tmdb")
+            await db.add_tmdb(movie_doc)
+            
