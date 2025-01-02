@@ -15,13 +15,18 @@ db = get_db()
 # http://127.0.0.1:8080/stream/latest
 @routes.get("/stream/latest")
 async def get_latest(request):
-    data = await db.get_latest()
+    page = int(request.query.get("page", 1))
+    if page < 1:
+        return web.json_response(
+            {"error": "Page must be positive integers"}, status=400
+        )
+    
+    data = await db.get_latest(page=page)
     if data is None:
         return web.json_response({"error": "Item not found"}, status=404)
     
     media_info = []
     for item in data:
-        del item["_id"]
         if item["type"] == "movie":
             data = extract_movie_info_raw(item)
         else:

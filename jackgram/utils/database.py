@@ -10,11 +10,12 @@ class Database:
         self.col = self.db.users
         self.tmdb_collection = self.db.tmdb
 
-    async def get_latest(self):
-        mydoc = self.tmdb_collection.find().sort("_id", -1).limit(20)
-        results = await mydoc.to_list()
+    async def get_latest(self, page=1, per_page=12):
+        skip = (page - 1) * per_page
+        mydoc = self.tmdb_collection.find().sort("_id", -1).skip(skip).limit(per_page)
+        results = await mydoc.to_list(length=per_page)
         return results
-    
+
     async def add_tmdb(self, data):
         try:
             if data.get("tmdb_id") == "null":
@@ -43,12 +44,12 @@ class Database:
         regex_query = {
             "title": {"$regex": ".*" + ".*".join(words) + ".*", "$options": "i"}
         }
-        offset = (int(page) - 1) * per_page
+        skip = (int(page) - 1) * per_page
 
         mydoc = (
             self.tmdb_collection.find(regex_query)
             .sort("msg_id", DESCENDING)
-            .skip(offset)
+            .skip(skip)
             .limit(per_page)
         )
 
