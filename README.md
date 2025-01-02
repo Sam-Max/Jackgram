@@ -145,8 +145,6 @@ Add the following environment variables to your config.env file.
 - `SLEEP_THRESHOLD`: | Set a sleep threshold for flood wait exceptions, defaut is `60`. `int`
 
 
- Your Mongo Database URL (Connection string).
-
 ### **Running using Docker Compose**
 
 docker-compose up -d
