@@ -18,6 +18,8 @@ def extract_show_info_raw(data):
                     "name": "Telegram",
                     "title": info.get("file_name"),
                     "mode": "tv",
+                    "season": episode.get("season_number"),
+                    "episode": episode.get("episode_number"),
                     "date": episode.get("date"),
                     "duration": episode.get("duration"),
                     "quality": info.get("quality"),
@@ -65,6 +67,8 @@ def extract_show_info(data, season_num, episode_num, tmdb_id):
                         episode_info = {
                             "name": "Telegram",
                             "title": info.get("file_name"),
+                            "season": episode.get("season_number"),
+                            "episode": episode.get("episode_number"),
                             "date": episode.get("date"),
                             "duration": episode.get("duration"),
                             "quality": info.get("quality"),
