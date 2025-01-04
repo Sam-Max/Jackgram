@@ -7,14 +7,30 @@ class Database:
     def __init__(self, uri, database_name):
         self.client = AsyncIOMotorClient(uri, maxPoolSize=10)
         self.db = self.client[database_name]
-        self.col = self.db.users
         self.tmdb_collection = self.db.tmdb
+        self.media_file_collection = self.db.media_file_collection
 
-    async def get_latest(self, page=1, per_page=12):
+    async def add_media_file(self, media_doc):
+        await self.media_file_collection.insert_one(media_doc)
+
+    async def del_media_file(self, hash):
+        return await self.tmdb_collection.delete_one({"hash": hash})
+
+    async def get_media_file(self, hash):
+        return await self.media_file_collection.find_one({"hash": hash})
+
+    async def get_media_files(self, page, per_page=11):
         skip = (page - 1) * per_page
-        mydoc = self.tmdb_collection.find().sort("_id", -1).skip(skip).limit(per_page)
-        results = await mydoc.to_list(length=per_page)
-        return results
+        mydoc = (
+            self.media_file_collection.find().sort("_id", -1).skip(skip).limit(per_page)
+        )
+        mydoc_results = await mydoc.to_list(length=per_page)
+        return mydoc_results
+
+    async def update_media_file(self, media_doc):
+        await self.media_file_collection.replace_one(
+            {"hash": media_doc["hash"]}, media_doc
+        )
 
     async def add_tmdb(self, data):
         try:
@@ -36,8 +52,11 @@ class Database:
             {"tmdb_id": {"$exists": True}}
         )
 
-    async def list_collections(self):
-        return await self.db.list_collection_names()
+    async def get_tmdb_latest(self, page=1, per_page=12):
+        skip = (page - 1) * per_page
+        mydoc = self.tmdb_collection.find().sort("_id", -1).skip(skip).limit(per_page)
+        mydoc_results = await mydoc.to_list(length=per_page)
+        return mydoc_results
 
     async def search_tmdb(self, query, page=1, per_page=50):
         words = query.split()
@@ -130,3 +149,6 @@ class Database:
                 matched_file_movie.update(info)
             else:
                 existing_media["file_info"].append(info)
+
+    async def list_collections(self):
+        return await self.db.list_collection_names()

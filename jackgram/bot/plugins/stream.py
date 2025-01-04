@@ -5,11 +5,12 @@ from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 from pyrogram.enums.parse_mode import ParseMode
 import PTN
-from jackgram.utils.index_utils import (
+from jackgram.utils.utils import (
     extract_file_info,
     format_filename,
     get_file_title,
     get_media_details,
+    process_files,
     process_movie,
     process_series,
 )
@@ -35,15 +36,22 @@ async def private_receive_handler(bot: Client, message: Message):
         file_info = await extract_file_info(file, message, filename)
 
         data = PTN.parse(filename)
-        media_id, media_details, episode_details = await get_media_details(data)
+        await get_media_details(data)
 
-        if media_id and media_details:
+        media_id = data["media_id"]
+        media_details = data["media_details"]
+        episode_details = data["episode_details"]
+
+        if media_id:
             if "season" in data and "episode" in data:
                 await process_series(
                     media_id, data, media_details, episode_details, file_info
                 )
             else:
                 await process_movie(media_id, media_details, file_info)
+        else:
+            await process_files(file_info)
+            
         
     except FloodWait as e:
         print(f"Sleeping for {str(e.value)}s")

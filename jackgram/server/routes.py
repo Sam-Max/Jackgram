@@ -29,13 +29,11 @@ async def root_route_handler(_):
     )
 
 
-@routes.get("/dl/{tmdb_id}", allow_head=True)
+@routes.get("/dl", allow_head=True)
 async def stream_handler(request: web.Request):
     print("routes::stream_handler")
     try:
-        tmdb_id = request.match_info['tmdb_id']
-        secure_hash = request.query.get('hash')
-        return await media_streamer(request, tmdb_id, secure_hash)
+        return await media_streamer(request)
     except InvalidHash as e:
         raise web.HTTPForbidden(text=e.message)
     except FileNotFound as e:
@@ -47,8 +45,9 @@ async def stream_handler(request: web.Request):
         raise web.HTTPInternalServerError(text=str(e))
     
 
-async def media_streamer(request: web.Request, tmdb_id: int, secure_hash: str):
+async def media_streamer(request: web.Request):
     print("routes::media_streamer")
+    secure_hash = request.query.get('hash')
     range_header = request.headers.get("Range", 0)
 
     if StreamBot in class_cache:
@@ -58,10 +57,10 @@ async def media_streamer(request: web.Request, tmdb_id: int, secure_hash: str):
         tg_connect = ByteStreamer(StreamBot)
         class_cache[StreamBot] = tg_connect
 
-    file_id = await tg_connect.get_file_properties(tmdb_id, secure_hash)
+    file_id = await tg_connect.get_file_properties(request, secure_hash)
     
     if file_id.unique_id[:6] != secure_hash:
-        logging.debug(f"Invalid hash for message with ID {id}")
+        logging.debug(f"Invalid hash for message with ID {file_id}")
         raise InvalidHash
     
     file_size = file_id.file_size

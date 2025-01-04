@@ -6,7 +6,7 @@ from pyrogram.errors import AuthBytesInvalid
 from pyrogram.file_id import FileId, FileType, ThumbnailSource
 from jackgram.server.exceptions import FileNotFound
 from jackgram.utils.file_properties import get_file_ids
-
+from aiohttp import web
 
 class ByteStreamer:
     def __init__(self, client: Client):
@@ -15,7 +15,7 @@ class ByteStreamer:
         self.__cached_file_ids = {}
         asyncio.create_task(self.clean_cache())
 
-    async def get_file_properties(self, tmdb_id: int, secure_hash: str) -> FileId:
+    async def get_file_properties(self, request:web.Request, secure_hash) -> FileId:
         """
         Returns the properties of a media of an specific message in a FileId class.
         If the properties are cached, then it'll return the cached results.
@@ -23,7 +23,7 @@ class ByteStreamer:
         """
 
         if secure_hash not in self.__cached_file_ids:
-            file_id = await get_file_ids(tmdb_id, secure_hash)
+            file_id = await get_file_ids(request, secure_hash)
             if not file_id:
                 raise FileNotFound
             self.__cached_file_ids[secure_hash] = file_id
