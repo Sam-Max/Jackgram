@@ -9,13 +9,14 @@ from aiohttp.http_exceptions import BadStatusLine
 from jackgram.bot import StreamBot, get_db
 from jackgram.server.exceptions import FileNotFound, InvalidHash
 from jackgram import __version__, StartTime
-from jackgram.utils.custom_dl import ByteStreamer
+from jackgram.utils.custom_dl import TelegramStreamer
 from jackgram.utils.utils import get_readable_time
 
 routes = web.RouteTableDef()
 
 class_cache = {}
 db = get_db()
+
 
 @routes.get("/status", allow_head=True)
 async def root_route_handler(_):
@@ -43,83 +44,84 @@ async def stream_handler(request: web.Request):
     except Exception as e:
         traceback.print_exc()
         raise web.HTTPInternalServerError(text=str(e))
-    
+
 
 async def media_streamer(request: web.Request):
-    print("routes::media_streamer")
-    secure_hash = request.query.get('hash')
-    range_header = request.headers.get("Range", 0)
+    """
+    Handles streaming media files based on a secure hash and HTTP Range requests.
+    """
+    secure_hash = request.query.get("hash")
+    range_header = request.headers.get("Range")
 
-    if StreamBot in class_cache:
-        tg_connect = class_cache[StreamBot]
-    else:
-        logging.debug(f"Creating new ByteStreamer object for client")
-        tg_connect = ByteStreamer(StreamBot)
+    # Retrieve or initialize the TelegramStreamer instance
+    tg_connect = class_cache.get(StreamBot)
+    if not tg_connect:
+        logging.debug("Creating new TelegramStreamer object for client")
+        tg_connect = TelegramStreamer(StreamBot)
         class_cache[StreamBot] = tg_connect
 
     file_id = await tg_connect.get_file_properties(request, secure_hash)
-    
+
+    # Validate secure hash
     if file_id.unique_id[:6] != secure_hash:
         logging.debug(f"Invalid hash for message with ID {file_id}")
         raise InvalidHash
-    
+
     file_size = file_id.file_size
 
+    # Parse Range header or HTTP range
     if range_header:
-        from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
-        from_bytes = int(from_bytes)
-        until_bytes = int(until_bytes) if until_bytes else file_size - 1
+        try:
+            from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
+            from_bytes = int(from_bytes)
+            until_bytes = int(until_bytes) if until_bytes else file_size - 1
+        except ValueError:
+            return web.Response(status=400, body="400: Bad Request")
     else:
         from_bytes = request.http_range.start or 0
         until_bytes = (request.http_range.stop or file_size) - 1
 
-    if (until_bytes > file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
+    # Validate range
+    if (until_bytes >= file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
         return web.Response(
             status=416,
             body="416: Range not satisfiable",
             headers={"Content-Range": f"bytes */{file_size}"},
         )
 
-    chunk_size = 1024 * 1024
-    until_bytes = min(until_bytes, file_size - 1)
-
+    # Calculate offsets and chunk details
+    chunk_size = 1024 * 1024  # 1 MB
     offset = from_bytes - (from_bytes % chunk_size)
     first_part_cut = from_bytes - offset
     last_part_cut = until_bytes % chunk_size + 1
-
     req_length = until_bytes - from_bytes + 1
-    part_count = math.ceil(until_bytes / chunk_size) - math.floor(offset / chunk_size)
-    
+    part_count = math.ceil((until_bytes + 1) / chunk_size) - math.floor(
+        offset / chunk_size
+    )
+
+    # Stream the file
     body = tg_connect.yield_file(
         file_id, offset, first_part_cut, last_part_cut, part_count, chunk_size
     )
 
-    mime_type = file_id.mime_type
-    file_name = file_id.file_name
-    disposition = "attachment"
+    # Determine MIME type and file name
+    mime_type = file_id.mime_type or "application/octet-stream"
+    file_name = file_id.file_name or f"{secrets.token_hex(2)}.unknown"
 
-    if mime_type:
-        if not file_name:
-            try:
-                file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
-            except (IndexError, AttributeError):
-                file_name = f"{secrets.token_hex(2)}.unknown"
-    else:
-        if file_name:
-            mime_type = mimetypes.guess_type(file_id.file_name)
-        else:
-            mime_type = "application/octet-stream"
-            file_name = f"{secrets.token_hex(2)}.unknown"
+    ## If not file name, it generates a random name with an inferred extension based on the MIME type.
+    if not file_id.file_name and file_id.mime_type:
+        try:
+            extension = file_id.mime_type.split("/")[1]
+            file_name = f"{secrets.token_hex(2)}.{extension}"
+        except (IndexError, AttributeError):
+            pass
 
-    return web.Response(
-        status=206 if range_header else 200,
-        body=body,
-        headers={
-            "Content-Type": f"{mime_type}",
-            "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
-            "Content-Length": str(req_length),
-            "Content-Disposition": f'{disposition}; filename="{file_name}"',
-            "Accept-Ranges": "bytes",
-        },
-    )
+    headers = {
+        "Content-Type": mime_type,
+        "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
+        "Content-Length": str(req_length),
+        "Content-Disposition": f'attachment; filename="{file_name}"',
+        "Accept-Ranges": "bytes",
+    }
 
+    return web.Response(status=206 if range_header else 200, body=body, headers=headers)
