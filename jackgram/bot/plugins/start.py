@@ -1,7 +1,7 @@
 from asyncio import sleep
 import json
 import os
-import datetime
+from datetime import datetime, timedelta
 import jwt
 import requests
 
@@ -236,10 +236,8 @@ async def delete_database(bot: Client, message: Message):
 @StreamBot.on_message(filters.command("token") & filters.private)
 async def generate_token(client, message):
     payload = {
-        "user_id": message.user.id,
-        "exp": datetime.now(datetime.timezone.utc)
-        + datetime.timedelta(hours=24),  # Token expiration
+        "user_id": message.from_user.id,
+        "exp": datetime.now() + timedelta(days=7),  # Token expiration
     }
-
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
     await message.reply_text(token)
