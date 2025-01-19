@@ -58,7 +58,11 @@ else:
     BASE_URL = f"http://127.0.0.1:{PORT}"
 
 BIND_ADDRESS = getenv("BIND_ADDRESS", "0.0.0.0")
-SECRET_KEY = getenv("SECRET_KEY", "")
+SECRET_KEY = getenv("SECRET_KEY", "your-secret-token")
+
+USE_TOKEN_SYSTEM = getenv("USE_TOKEN_SYSTEM", "True")
+USE_TOKEN_SYSTEM  = USE_TOKEN_SYSTEM.strip().lower() == "true"
+
 PING_INTERVAL = int(getenv("PING_INTERVAL", "1200"))
 
 StreamBot = Client(

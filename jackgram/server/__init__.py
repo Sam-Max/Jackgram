@@ -1,4 +1,4 @@
-from jackgram.bot import SECRET_KEY
+from jackgram.bot import SECRET_KEY, USE_TOKEN_SYSTEM
 from jackgram.server.routes import routes
 from jackgram.server.api.bot_api import routes as api
 from aiohttp import web
@@ -26,8 +26,11 @@ async def auth_middleware(app, handler):
 
 
 def web_server():
-    web_app = web.Application(client_max_size=30000000, middlewares=[auth_middleware])
-    #web_app = web.Application(client_max_size=30000000)
+    middlewares = []
+    if USE_TOKEN_SYSTEM:
+        middlewares.append(auth_middleware)
+    web_app = web.Application(client_max_size=30000000, middlewares=middlewares)
+    # web_app = web.Application(client_max_size=30000000)
     web_app.add_routes(routes)
     web_app.add_routes(api)
     return web_app
