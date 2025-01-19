@@ -12,7 +12,7 @@ from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 
 from jackgram.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot, StreamUser
-from jackgram.bot.index import index_channel
+from jackgram.bot.utils import index_channel
 from jackgram.utils.utils import (
     extract_movie_info,
     extract_show_info_raw,
@@ -207,8 +207,14 @@ async def load_database(bot: Client, message: Message):
                 except Exception:
                     document.pop(
                         "_id"
-                    )  # Remove invalid _id fields if they cannot be converted
-            await collection.insert_one(document)
+                    )  
+                await collection.update_one(
+                    {
+                        "_id": document.get("_id")
+                    },
+                    {"$set": document},
+                    upsert=True,
+                )
 
     await message.reply_text("Database restored successfully from the uploaded file!")
 
@@ -219,11 +225,11 @@ async def delete_database(bot: Client, message: Message):
     if len(args) == 1:
         database_name = args[0]
     else:
-        await message.reply(text="Use /del_db name")
+        await message.reply(text="Use /del_db database_name")
         return
 
     await db.client.drop_database(database_name)
-
+    
     await message.reply_text(f"Database '{database_name}' has been deleted.")
 
 
