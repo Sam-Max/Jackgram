@@ -1,4 +1,4 @@
-aiohttp
+quart
 pyrofork
 python-dotenv
 parse-torrent-title

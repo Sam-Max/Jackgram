@@ -87,8 +87,8 @@ def get_file_info(message):
 async def get_file_ids(request, secure_hash) -> Optional[FileId]:
     print("file_properties::get_file_ids")
 
-    tmdb_id = request.query.get('tmdb_id')
-    file_id = request.query.get('file_id')
+    tmdb_id = request.args.get('tmdb_id')
+    file_id = request.args.get('file_id')
 
     if tmdb_id:
         results = await db.get_tmdb(tmdb_id)

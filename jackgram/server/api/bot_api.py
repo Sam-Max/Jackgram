@@ -1,4 +1,3 @@
-from aiohttp import web
 from jackgram.bot import get_db
 from jackgram.utils.utils import (
     extract_movie_info,
@@ -7,97 +6,84 @@ from jackgram.utils.utils import (
     extract_show_info_raw,
     generate_stream_url_file,
 )
+from quart import Blueprint, jsonify, request
 
-routes = web.RouteTableDef()
+stream_routes = Blueprint("stream", __name__, url_prefix="/stream")
 
 db = get_db()
 
 
-# http://127.0.0.1:8080/stream/latest
-@routes.get("/stream/latest")
-async def get_latest(request):
-    page = int(request.query.get("page", 1))
+@stream_routes.route("/latest", methods=["GET"])
+async def stream_latest():
+    page = int(request.args.get("page", 1))
     if page < 1:
-        return web.json_response(
-            {"error": "Page must be positive integers"}, status=400
-        )
+        return jsonify({"error": "Page must be positive integers"}), 400
 
     data = await db.get_tmdb_latest(page=page)
     if data is None:
-        return web.json_response({"error": "Item not found"}, status=404)
+        return jsonify({"error": "Item not found"}), 404
 
     media_info = []
     for item in data:
         if item["type"] == "movie":
-            data = extract_movie_info_raw(item)
+            media_info.append(extract_movie_info_raw(item))
         elif item["type"] == "tv":
-            data = extract_show_info_raw(item)
-        media_info.append(data)
+            media_info.append(extract_show_info_raw(item))
 
-    return web.json_response(media_info)
+    return media_info
 
 
-# http://127.0.0.1:8080/stream/files
-@routes.get("/stream/files")
-async def get_files(request):
-    page = int(request.query.get("page", 1))
+@stream_routes.route("/files", methods=["GET"])
+async def stream_files():
+    page = int(request.args.get("page", 1))
     if page < 1:
-        return web.json_response(
-            {"error": "Page must be positive integers"}, status=400
-        )
+        return jsonify({"error": "Page must be positive integers"}), 400
 
     data = await db.get_media_files(page=page)
     if data is None:
-        return web.json_response({"error": "Item not found"}, status=404)
-    
+        return jsonify({"error": "Item not found"}), 404
+
     for item in data:
         del item["_id"]
         item["name"] = "Telegram"
         item["url"] = generate_stream_url_file(hash=item.get("hash"))
 
-    return web.json_response(data)
+    return data
 
 
-# http://127.0.0.1:8080/stream/series/4343434:1:1.json
-@routes.get("/stream/series/{tmdb_id}:{season}:{episode}.json")
-async def stream_series(request):
-    tmdb_id = request.match_info["tmdb_id"]
+@stream_routes.route(
+    "/series/<int:tmdb_id>:<int:season>:<int:episode>.json", methods=["GET"]
+)
+async def stream_series(tmdb_id, season, episode):
     if not tmdb_id:
-        return web.json_response({"stream": []})
-
-    season = request.match_info["season"]
-    episode = request.match_info["episode"]
+        return jsonify({"stream": []})
 
     data = await db.get_tmdb(tmdb_id)
     if data is None:
-        return web.json_response({"error": "Item not found"}, status=404)
+        return jsonify({"error": "Item not found"}), 404
 
     if data.get("type") == "tv":
-        info = extract_show_info(data, season, episode, tmdb_id)
-
-        return web.json_response(
+        return jsonify(
             {
                 "tmdb_id": tmdb_id,
-                "streams": info,
+                "streams": extract_show_info(data, season, episode, tmdb_id),
             }
         )
 
 
-# http://127.0.0.1:8080/stream/movie/4343434.json
-@routes.get("/stream/movie/{tmdb_id}.json")
-async def stream_series(request):
-    tmdb_id = request.match_info["tmdb_id"]
+@stream_routes.route("/movie/<int:tmdb_id>.json")
+async def stream_movie(tmdb_id):
     if not tmdb_id:
-        return web.json_response({"stream": []})
+        return jsonify({"stream": []})
 
     data = await db.get_tmdb(tmdb_id)
     if data is None:
-        return web.json_response({"error": "Item not found"}, status=404)
+        return jsonify({"error": "Item not found"}), 404
 
     if data.get("type") == "movie":
         info = extract_movie_info(data, tmdb_id)
 
-        return web.json_response(
+        return jsonify(
             {
                 "tmdb_id": tmdb_id,
                 "streams": info,
@@ -105,41 +91,39 @@ async def stream_series(request):
         )
 
 
-# http://127.0.0.1:8080/search?query="From"&page=1
-@routes.get("/search", allow_head=True)
-async def search_handler(request: web.Request):
+@stream_routes.route("/search", methods=["GET"])
+async def stream_search():
     try:
-        search_query = request.query.get("query")
-        page = int(request.query.get("page", 1))
+        search_query = request.args.get("query")
+        page = int(request.args.get("page", 1))
 
         if not search_query:
-            return web.json_response(
-                {"error": "Search query (q) is required"}, status=400
-            )
+            return jsonify({"error": "Search query (q) is required"}), 400
 
         if page < 1:
-            return web.json_response(
-                {"error": "Page must be positive integers"}, status=400
-            )
+            return jsonify({"error": "Page must be positive integers"}), 400
 
         results, total_count = await db.search_tmdb(search_query, page)
-        if results:
-            media_info = []
-            for result in results:
-                if result["type"] == "movie":
-                    data = extract_movie_info_raw(result)
-                else:
-                    data = extract_show_info_raw(result)
-                media_info.append(data)
 
-            return web.json_response(
-                {
-                    "page": page,
-                    "total_count": total_count,
-                    "results": media_info,
-                }
+        if not results:
+            return jsonify({"error": "Item not found"}), 404
+
+        media_info = [
+            (
+                extract_movie_info_raw(result)
+                if result["type"] == "movie"
+                else extract_show_info_raw(result)
             )
-        else:
-            return web.json_response({"error": "Item not found"}, status=404)
+            for result in results
+        ]
+
+        return jsonify(
+            {
+                "page": page,
+                "total_count": total_count,
+                "results": media_info,
+            }
+        )
+
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        return jsonify({"error": str(e)}), 500

@@ -149,7 +149,7 @@ def extract_show_info_raw(data):
         "tmdb_id": data.get("tmdb_id"),
         "title": data.get("title"),
         "type": data.get("type"),
-        "country": data.get("origin_country")[0],
+        "country": data.get("origin_country"),
         "language": data.get("original_language"),
         "files": [],
     }
@@ -179,7 +179,7 @@ def extract_movie_info_raw(data):
         "tmdb_id": data.get("tmdb_id"),
         "title": data.get("title"),
         "type": data.get("type"),
-        "country": data.get("origin_country")[0],
+        "country": data.get("origin_country"),
         "language": data.get("original_language"),
         "date": data.get("release_date"),
         "duration": data.get("runtime"),

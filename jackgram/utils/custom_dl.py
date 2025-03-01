@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from aiohttp import web
 from typing import AsyncGenerator
 
 from pyrogram import Client, raw
@@ -19,9 +18,7 @@ class TelegramStreamer:
         self.__cached_file_ids = {}
         asyncio.create_task(self._clean_cache())
 
-    async def get_file_properties(
-        self, request: web.Request, secure_hash: str
-    ) -> FileId:
+    async def get_file_properties(self, request, secure_hash: str) -> FileId:
         """
         Retrieves the properties of a media file using a secure hash.
         Uses cached results if available; otherwise, generates and caches the properties.
@@ -78,6 +75,9 @@ class TelegramStreamer:
 
         except (TimeoutError, AttributeError):
             logging.error("Error occurred during file streaming.")
+        except (asyncio.CancelledError, ConnectionResetError, BrokenPipeError):
+            logging.warning("Streaming aborted by client")
+            return
         finally:
             logging.debug(f"Finished yielding file with {current_part} parts.")
 

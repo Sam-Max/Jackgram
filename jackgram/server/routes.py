@@ -1,56 +1,50 @@
+import asyncio
 import secrets
-import time
 import math
 import logging
-import mimetypes
 import traceback
-from aiohttp import web
-from aiohttp.http_exceptions import BadStatusLine
+from quart import Blueprint, Response, jsonify, request
 from jackgram.bot import StreamBot, get_db
 from jackgram.server.exceptions import FileNotFound, InvalidHash
-from jackgram import __version__, StartTime
 from jackgram.utils.custom_dl import TelegramStreamer
-from jackgram.utils.utils import get_readable_time
 
-routes = web.RouteTableDef()
+routes = Blueprint("routes", __name__)
 
 class_cache = {}
 db = get_db()
 
 
-@routes.get("/status", allow_head=True)
-async def root_route_handler(_):
-    return web.json_response(
+@routes.route("/status", methods=["GET"])
+async def root_route_handler():
+    return jsonify(
         {
             "server_status": "running",
-            "uptime": get_readable_time(time.time() - StartTime),
             "telegram_bot": "@" + StreamBot.me.username,
-            "version": __version__,
+            "version": "0.0.1",
         }
     )
 
 
-@routes.get("/dl", allow_head=True)
-async def stream_handler(request: web.Request):
-    print("routes::stream_handler")
+@routes.route("/dl", methods=["GET", "HEAD"])
+async def stream_handler():
     try:
         return await media_streamer(request)
     except InvalidHash as e:
-        raise web.HTTPForbidden(text=e.message)
+        return jsonify({"error": e.message}), 403
     except FileNotFound as e:
-        raise web.HTTPNotFound(text=e.message)
-    except (AttributeError, BadStatusLine, ConnectionResetError):
-        pass
+        return jsonify({"error": e.message}), 404
+    except (asyncio.CancelledError, BrokenPipeError, ConnectionResetError):
+        return Response(status=499)
     except Exception as e:
         traceback.print_exc()
-        raise web.HTTPInternalServerError(text=str(e))
+        return jsonify({"error": str(e)}), 500
 
 
-async def media_streamer(request: web.Request):
+async def media_streamer(request):
     """
     Handles streaming media files based on a secure hash and HTTP Range requests.
     """
-    secure_hash = request.query.get("hash")
+    secure_hash = request.args.get("hash")
     range_header = request.headers.get("Range")
 
     # Retrieve or initialize the TelegramStreamer instance
@@ -64,7 +58,7 @@ async def media_streamer(request: web.Request):
 
     # Validate secure hash
     if file_id.unique_id[:6] != secure_hash:
-        logging.debug(f"Invalid hash for message with ID {file_id}")
+        logging.info(f"Invalid hash for message with ID {file_id}")
         raise InvalidHash
 
     file_size = file_id.file_size
@@ -74,18 +68,18 @@ async def media_streamer(request: web.Request):
         try:
             from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
             from_bytes = int(from_bytes)
-            until_bytes = int(until_bytes) if until_bytes else file_size - 1
+            until_bytes = min(int(until_bytes), file_size - 1) if until_bytes else file_size - 1
         except ValueError:
-            return web.Response(status=400, body="400: Bad Request")
+            return Response("400: Bad Request", status=400)
     else:
-        from_bytes = request.http_range.start or 0
-        until_bytes = (request.http_range.stop or file_size) - 1
+        from_bytes =  0
+        until_bytes = file_size - 1
 
     # Validate range
     if (until_bytes >= file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
-        return web.Response(
+        return Response(
+            "416: Range not satisfiable",
             status=416,
-            body="416: Range not satisfiable",
             headers={"Content-Range": f"bytes */{file_size}"},
         )
 
@@ -122,6 +116,10 @@ async def media_streamer(request: web.Request):
         "Content-Length": str(req_length),
         "Content-Disposition": f'attachment; filename="{file_name}"',
         "Accept-Ranges": "bytes",
-    }
+    }   
 
-    return web.Response(status=206 if range_header else 200, body=body, headers=headers)
+    logging.info(f"File Size: {file_size}")
+    logging.info(f"Content-Range: bytes {from_bytes}-{until_bytes}/{file_size}")
+    logging.info(f"Content-Length: {req_length}")
+
+    return Response(response=body, status=206 if range_header else 200, headers=headers)
