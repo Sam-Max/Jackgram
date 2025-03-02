@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 
 from jackgram.utils.database import Database
 
-plugins = {"root": "jackgram/bot/plugins"}
 no_updates = None
 lock = asyncio.Lock()
 
@@ -69,11 +68,11 @@ StreamBot = Client(
     name="stream_bot",
     api_id=API_ID,
     api_hash=API_HASH,
-    plugins=plugins,
     bot_token=BOT_TOKEN,
+    plugins=dict(root="jackgram/bot/plugins"),
     sleep_threshold=SLEEP_THRESHOLD,
     workers=WORKERS,
-    max_concurrent_transmissions=1000,
+    max_concurrent_transmissions=100,
 )
 
 StreamUser = Client(

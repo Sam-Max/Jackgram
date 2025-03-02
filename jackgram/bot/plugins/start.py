@@ -3,7 +3,6 @@ import json
 import os
 from datetime import datetime, timedelta
 import jwt
-import requests
 
 from bson.objectid import ObjectId
 
@@ -11,7 +10,7 @@ from pyrogram import filters, Client
 from pyrogram.errors import FloodWait
 from pyrogram.types import Message
 
-from jackgram.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot, StreamUser
+from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot, StreamUser
 from jackgram.bot.utils import index_channel
 from jackgram.utils.utils import (
     extract_movie_info,
@@ -19,12 +18,12 @@ from jackgram.utils.utils import (
     generate_stream_url,
 )
 
-session = requests.Session()
+
 db = get_db()
 
 
-@StreamBot.on_message(filters.command("start") & filters.private)
-async def start(bot: Client, message: Message):
+@Client.on_message(filters.command("start"))
+async def start(bot, message):
     await message.reply_text(
         "Welcome to JackgramBot!!. Click /index for more info or send a file to the logs channel to index it"
     )
@@ -205,13 +204,9 @@ async def load_database(bot: Client, message: Message):
                 try:
                     document["_id"] = ObjectId(document["_id"])
                 except Exception:
-                    document.pop(
-                        "_id"
-                    )  
+                    document.pop("_id")
                 await collection.update_one(
-                    {
-                        "_id": document.get("_id")
-                    },
+                    {"_id": document.get("_id")},
                     {"$set": document},
                     upsert=True,
                 )
@@ -229,7 +224,7 @@ async def delete_database(bot: Client, message: Message):
         return
 
     await db.client.drop_database(database_name)
-    
+
     await message.reply_text(f"Database '{database_name}' has been deleted.")
 
 

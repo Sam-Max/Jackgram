@@ -1,4 +1,4 @@
-from jackgram.bot import StreamBot
+from jackgram.bot.bot import StreamBot
 import asyncio
 from pyrogram import filters, Client
 from pyrogram.errors import FloodWait

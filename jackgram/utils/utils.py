@@ -1,6 +1,6 @@
-from jackgram.bot import BASE_URL, get_db
+from jackgram.bot.bot import BASE_URL, get_db
 import re
-from jackgram.bot import lock
+from jackgram.bot.bot import lock
 import PTN
 from jackgram.utils.tmdb import get_tmdb
 

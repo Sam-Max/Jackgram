@@ -1,4 +1,6 @@
-from jackgram.bot import get_db
+import logging
+from fastapi import APIRouter, HTTPException, Query
+from jackgram.bot.bot import get_db
 from jackgram.utils.utils import (
     extract_movie_info,
     extract_movie_info_raw,
@@ -6,22 +8,20 @@ from jackgram.utils.utils import (
     extract_show_info_raw,
     generate_stream_url_file,
 )
-from quart import Blueprint, jsonify, request
 
-stream_routes = Blueprint("stream", __name__, url_prefix="/stream")
+stream_routes = APIRouter(prefix="/stream")
 
 db = get_db()
 
 
-@stream_routes.route("/latest", methods=["GET"])
-async def stream_latest():
-    page = int(request.args.get("page", 1))
+@stream_routes.get("/latest")
+async def stream_latest(page: int = Query(1)):
     if page < 1:
-        return jsonify({"error": "Page must be positive integers"}), 400
+        raise HTTPException(status_code=400, detail="Page must be positive integers")
 
     data = await db.get_tmdb_latest(page=page)
     if data is None:
-        return jsonify({"error": "Item not found"}), 404
+        raise HTTPException(status_code=404, detail="Item not found")
 
     media_info = []
     for item in data:
@@ -33,15 +33,14 @@ async def stream_latest():
     return media_info
 
 
-@stream_routes.route("/files", methods=["GET"])
-async def stream_files():
-    page = int(request.args.get("page", 1))
+@stream_routes.get("/files")
+async def stream_files(page: int = Query(1)):
     if page < 1:
-        return jsonify({"error": "Page must be positive integers"}), 400
+        raise HTTPException(status_code=400, detail="Page must be positive integers")
 
     data = await db.get_media_files(page=page)
     if data is None:
-        return jsonify({"error": "Item not found"}), 404
+        raise HTTPException(status_code=404, detail="Item not found")
 
     for item in data:
         del item["_id"]
@@ -51,62 +50,53 @@ async def stream_files():
     return data
 
 
-@stream_routes.route(
-    "/series/<int:tmdb_id>:<int:season>:<int:episode>.json", methods=["GET"]
-)
+@stream_routes.get("/series/{tmdb_id}:{season}:{episode}.json")
 async def stream_series(tmdb_id, season, episode):
     if not tmdb_id:
-        return jsonify({"stream": []})
+        return {"stream": []}
 
     data = await db.get_tmdb(tmdb_id)
     if data is None:
-        return jsonify({"error": "Item not found"}), 404
+        raise HTTPException(status_code=404, detail="Item not found")
 
     if data.get("type") == "tv":
-        return jsonify(
-            {
-                "tmdb_id": tmdb_id,
-                "streams": extract_show_info(data, season, episode, tmdb_id),
-            }
-        )
+        return {
+            "tmdb_id": tmdb_id,
+            "streams": extract_show_info(data, season, episode, tmdb_id),
+        }
 
 
-@stream_routes.route("/movie/<int:tmdb_id>.json")
+@stream_routes.get("/movie/{tmdb_id}.json")
 async def stream_movie(tmdb_id):
     if not tmdb_id:
-        return jsonify({"stream": []})
+        return {"stream": []}
 
     data = await db.get_tmdb(tmdb_id)
     if data is None:
-        return jsonify({"error": "Item not found"}), 404
+        raise HTTPException(status_code=404, detail="Item not found")
 
     if data.get("type") == "movie":
         info = extract_movie_info(data, tmdb_id)
 
-        return jsonify(
-            {
-                "tmdb_id": tmdb_id,
-                "streams": info,
-            }
-        )
+        return {
+            "tmdb_id": tmdb_id,
+            "streams": info,
+        }
 
 
-@stream_routes.route("/search", methods=["GET"])
-async def stream_search():
+@stream_routes.get("/search")
+async def stream_search(search_query: str = Query(..., alias="q"), page: int = Query(1)):
     try:
-        search_query = request.args.get("query")
-        page = int(request.args.get("page", 1))
-
         if not search_query:
-            return jsonify({"error": "Search query (q) is required"}), 400
+            raise HTTPException(status_code=400, detail="Search query (q) is required")
 
         if page < 1:
-            return jsonify({"error": "Page must be positive integers"}), 400
+            raise HTTPException(status_code=400, detail="Page must be positive integers")
 
         results, total_count = await db.search_tmdb(search_query, page)
 
         if not results:
-            return jsonify({"error": "Item not found"}), 404
+            raise HTTPException(status_code=404, detail="Item not found")
 
         media_info = [
             (
@@ -117,13 +107,11 @@ async def stream_search():
             for result in results
         ]
 
-        return jsonify(
-            {
+        return {
                 "page": page,
                 "total_count": total_count,
                 "results": media_info,
             }
-        )
 
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))

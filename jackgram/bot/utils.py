@@ -2,7 +2,7 @@ import asyncio
 import logging
 import PTN
 from pyrogram.errors import FloodWait
-from jackgram.bot import LOGS_CHANNEL
+from jackgram.bot.bot import LOGS_CHANNEL
 from jackgram.utils.utils import (
     extract_file_info,
     format_filename,

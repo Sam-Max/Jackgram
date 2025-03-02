@@ -77,7 +77,6 @@ class TelegramStreamer:
             logging.error("Error occurred during file streaming.")
         except (asyncio.CancelledError, ConnectionResetError, BrokenPipeError):
             logging.warning("Streaming aborted by client")
-            return
         finally:
             logging.debug(f"Finished yielding file with {current_part} parts.")
 

@@ -3,7 +3,7 @@ from math import ceil
 import re
 from typing import Optional
 from requests.sessions import Session
-from jackgram.bot import TMDB_API, TMDB_LANGUAGE
+from jackgram.bot.bot import TMDB_API, TMDB_LANGUAGE
 
 
 class TMDBClient:

@@ -3,49 +3,49 @@ import secrets
 import math
 import logging
 import traceback
-from quart import Blueprint, Response, jsonify, request
-from jackgram.bot import StreamBot, get_db
+
+from fastapi import APIRouter, HTTPException, Query, Request, Response
+from fastapi.responses import StreamingResponse
+from jackgram.bot.bot import StreamBot, get_db
 from jackgram.server.exceptions import FileNotFound, InvalidHash
 from jackgram.utils.custom_dl import TelegramStreamer
 
-routes = Blueprint("routes", __name__)
+routes = APIRouter()
 
 class_cache = {}
 db = get_db()
 
 
-@routes.route("/status", methods=["GET"])
+@routes.get("/status")
 async def root_route_handler():
-    return jsonify(
-        {
-            "server_status": "running",
-            "telegram_bot": "@" + StreamBot.me.username,
-            "version": "0.0.1",
-        }
-    )
+    return {
+        "server_status": "running",
+        "telegram_bot": "@" + StreamBot.me.username,
+        "version": "0.0.1",
+    }
 
 
-@routes.route("/dl", methods=["GET", "HEAD"])
-async def stream_handler():
+@routes.get("/dl")
+async def stream_handler(request: Request, hash: str = Query(...)):
     try:
-        return await media_streamer(request)
+        return await media_streamer(request, hash)
     except InvalidHash as e:
-        return jsonify({"error": e.message}), 403
+        raise HTTPException(status_code=403, detail=e.message)
     except FileNotFound as e:
-        return jsonify({"error": e.message}), 404
-    except (asyncio.CancelledError, BrokenPipeError, ConnectionResetError):
-        return Response(status=499)
+        raise HTTPException(status_code=404, detail=e.message)
+    except (asyncio.CancelledError, BrokenPipeError, ConnectionResetError) as e:
+        raise HTTPException(status_code=499, detail=str(e))
     except Exception as e:
         traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-async def media_streamer(request):
+async def media_streamer(request: Request, secure_hash: str):
     """
     Handles streaming media files based on a secure hash and HTTP Range requests.
     """
-    secure_hash = request.args.get("hash")
     range_header = request.headers.get("Range")
+    logging.info(f"Range header: {range_header}")
 
     # Retrieve or initialize the TelegramStreamer instance
     tg_connect = class_cache.get(StreamBot)
@@ -58,7 +58,7 @@ async def media_streamer(request):
 
     # Validate secure hash
     if file_id.unique_id[:6] != secure_hash:
-        logging.info(f"Invalid hash for message with ID {file_id}")
+        logging.info(f"Invalid hash for message with ID {file_id.unique_id}")
         raise InvalidHash
 
     file_size = file_id.file_size
@@ -68,18 +68,20 @@ async def media_streamer(request):
         try:
             from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
             from_bytes = int(from_bytes)
-            until_bytes = min(int(until_bytes), file_size - 1) if until_bytes else file_size - 1
+            until_bytes = (
+                min(int(until_bytes), file_size - 1) if until_bytes else file_size - 1
+            )
         except ValueError:
-            return Response("400: Bad Request", status=400)
+            raise HTTPException(status_code=400, detail="Bad Request")
     else:
-        from_bytes =  0
+        from_bytes = 0
         until_bytes = file_size - 1
 
     # Validate range
     if (until_bytes >= file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
         return Response(
             "416: Range not satisfiable",
-            status=416,
+            status_code=416,
             headers={"Content-Range": f"bytes */{file_size}"},
         )
 
@@ -116,10 +118,12 @@ async def media_streamer(request):
         "Content-Length": str(req_length),
         "Content-Disposition": f'attachment; filename="{file_name}"',
         "Accept-Ranges": "bytes",
-    }   
+    }
 
     logging.info(f"File Size: {file_size}")
     logging.info(f"Content-Range: bytes {from_bytes}-{until_bytes}/{file_size}")
     logging.info(f"Content-Length: {req_length}")
 
-    return Response(response=body, status=206 if range_header else 200, headers=headers)
+    return StreamingResponse(
+        content=body, status_code=206 if range_header else 200, headers=headers
+    )

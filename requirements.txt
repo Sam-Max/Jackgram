@@ -1,4 +1,5 @@
-quart
+fastapi
+uvicorn
 pyrofork
 python-dotenv
 parse-torrent-title

@@ -1,10 +1,12 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
+
+from fastapi import Request
 from pyrogram.enums import ChatType
 from pyrogram.types import Message
 from pyrogram.file_id import FileId
-from jackgram.bot import get_db
+from jackgram.bot.bot import get_db
 from jackgram.utils.utils import extract_media_by_hash
 
 
@@ -84,11 +86,11 @@ def get_file_info(message):
     }
 
 
-async def get_file_ids(request, secure_hash) -> Optional[FileId]:
+async def get_file_ids(request: Request, secure_hash) -> Optional[FileId]:
     print("file_properties::get_file_ids")
 
-    tmdb_id = request.args.get('tmdb_id')
-    file_id = request.args.get('file_id')
+    tmdb_id = request.query_params.get('tmdb_id')
+    file_id = request.query_params.get('file_id')
 
     if tmdb_id:
         results = await db.get_tmdb(tmdb_id)

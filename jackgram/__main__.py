@@ -4,9 +4,10 @@ import logging
 import traceback
 import logging.handlers as handlers
 
-from jackgram.bot import BIND_ADDRESS, PORT, SESSION_STRING, StreamBot, StreamUser
+from jackgram.bot.bot import BIND_ADDRESS, PORT, SESSION_STRING, StreamBot, StreamUser
 from jackgram import app
 
+import uvicorn
 from pyrogram import idle
 
 
@@ -31,12 +32,15 @@ bot_logger = logging.getLogger("jackgram").setLevel(logging.DEBUG)
 
 async def start_services():
     logging.info("Initializing Web Server...")
-    web_task = asyncio.create_task(
-        app.run_task(host=BIND_ADDRESS, port=PORT, debug=False)
-    )
+    config = uvicorn.Config(app, host=BIND_ADDRESS, port=PORT, log_level="info")
+    server = uvicorn.Server(config)
+    web_task = asyncio.create_task(server.serve())
 
     logging.info("Initializing Bot Client...")
+
     await StreamBot.start()
+
+    print(StreamBot.is_connected)
 
     if len(SESSION_STRING) != 0:
         logging.info(f"Initializing User Client...")
@@ -58,7 +62,7 @@ async def cleanup(web_task):
 
 if __name__ == "__main__":
     try:
-        asyncio.run(start_services())
+        asyncio.get_event_loop().run_until_complete(start_services())
     except KeyboardInterrupt:
         logging.info("Shutting down due to KeyboardInterrupt")
     except Exception as err:
