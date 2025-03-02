@@ -3,8 +3,8 @@
 ## **Features**
 
 - Index files of public and private channel
-- API Rest with Quart(Flask-compatible)
-- Auth token system for API.
+- API Rest with FastAPI
+- Auth token system.
 - Stream and download video files using an API endpoint
 - Database support with MongoDB
 - Tmdb API support
