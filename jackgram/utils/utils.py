@@ -42,11 +42,14 @@ async def extract_file_info(file, message, filename: str) -> Dict[str, Union[str
     }
 
 
-async def get_media_details(data: Dict[str, Union[str, int]]) -> None:
+async def get_media_details(
+    data: Dict[str, Union[str, int]],
+) -> Dict[str, Optional[Union[int, Dict]]]:
     title = data.get("title")
     year = data.get("year")
     details = {}
     episode_details = {}
+    media_id = None
 
     if "season" in data and "episode" in data:
         media_id = tmdb.find_media_id(title=title, data_type="series", year=year)
@@ -64,9 +67,11 @@ async def get_media_details(data: Dict[str, Union[str, int]]) -> None:
             tmdb_id=media_id, data_type="movie" if "episode" not in data else "series"
         )
 
-    data["media_id"] = media_id
-    data["media_details"] = details
-    data["episode_details"] = episode_details
+    return {
+        "media_id": media_id,
+        "media_details": details,
+        "episode_details": episode_details,
+    }
 
 
 async def process_series(

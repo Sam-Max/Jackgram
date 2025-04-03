@@ -70,11 +70,15 @@ async def index_channel(
                         file_info = await extract_file_info(file, message, filename)
 
                         data: dict = PTN.parse(filename)
-                        await get_media_details(data)
+                        media_details_result = await get_media_details(data)
 
-                        media_id: Optional[str] = data.get("media_id")
-                        media_details: Optional[dict] = data.get("media_details")
-                        episode_details: Optional[dict] = data.get("episode_details")
+                        media_id: Optional[str] = media_details_result.get("media_id")
+                        media_details: Optional[dict] = media_details_result.get(
+                            "media_details"
+                        )
+                        episode_details: Optional[dict] = media_details_result.get(
+                            "episode_details"
+                        )
 
                         if media_id:
                             if "season" in data and "episode" in data:
