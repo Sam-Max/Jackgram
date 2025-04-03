@@ -36,11 +36,11 @@ async def private_receive_handler(bot: Client, message: Message):
         file_info = await extract_file_info(file, message, filename)
 
         data = PTN.parse(filename)
-        await get_media_details(data)
+        media_details_result = await get_media_details(data)
 
-        media_id = data["media_id"]
-        media_details = data["media_details"]
-        episode_details = data["episode_details"]
+        media_id = media_details_result["media_id"]
+        media_details = media_details_result["media_details"]
+        episode_details = media_details_result["episode_details"]
 
         if media_id:
             if "season" in data and "episode" in data:
