@@ -1,11 +1,11 @@
 import datetime
+from typing import Optional, Dict, Any
 from pyrogram.enums import ChatType
-from pyrogram.types import Message
 from pyrogram.file_id import FileId
 from pyrogram.types import Message
 
 
-def get_file_info(message):
+def get_file_info(message: Message) -> Dict[str, Any]:
     media = get_media_from_message(message)
     if message.chat.type == ChatType.PRIVATE:
         user_id = message.from_user.id
@@ -21,7 +21,7 @@ def get_file_info(message):
     }
 
 
-def get_media_from_message(message):
+def get_media_from_message(message: Message) -> Optional[Any]:
     media_types = (
         "audio",
         "document",
@@ -36,9 +36,10 @@ def get_media_from_message(message):
         media = getattr(message, attr, None)
         if media:
             return media
+    return None
 
 
-def get_name(media_msg):
+def get_name(media_msg: Message | FileId) -> str:
     if isinstance(media_msg, Message):
         media = get_media_from_message(media_msg)
         file_name = getattr(media, "file_name", "")

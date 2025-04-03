@@ -25,6 +25,7 @@ class TelegramStreamer:
         """
         if secure_hash not in self.__cached_file_ids:
             file_id = await get_file_ids(request, secure_hash)
+            logging.info(f"File ID: {file_id}")
             if not file_id:
                 raise FileNotFound
             self.__cached_file_ids[secure_hash] = file_id

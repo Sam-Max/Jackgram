@@ -40,8 +40,6 @@ async def start_services():
 
     await StreamBot.start()
 
-    print(StreamBot.is_connected)
-
     if len(SESSION_STRING) != 0:
         logging.info(f"Initializing User Client...")
         await StreamUser.start()

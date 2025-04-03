@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
+import logging
 from typing import Any, Optional
 
 from fastapi import Request
@@ -87,14 +88,20 @@ def get_file_info(message):
 
 
 async def get_file_ids(request: Request, secure_hash) -> Optional[FileId]:
-    print("file_properties::get_file_ids")
+    tmdb_id = int(request.query_params.get("tmdb_id"))
+    file_id = request.query_params.get("file_id")
 
-    tmdb_id = request.query_params.get('tmdb_id')
-    file_id = request.query_params.get('file_id')
+    logging.info(
+        f"get_file_ids: tmdb_id={tmdb_id}, file_id={file_id}, secure_hash={secure_hash}"
+    )
 
     if tmdb_id:
-        results = await db.get_tmdb(tmdb_id)
-        media = await extract_media_by_hash(results, secure_hash)
+        data = await db.get_tmdb(tmdb_id)
+        logging.info(f"get_file_ids: data={data}")
+        if data:
+            media = await extract_media_by_hash(data, secure_hash)
+        else:
+            return None
     elif file_id:
         media = await db.get_media_file(file_id)
 
@@ -102,8 +109,9 @@ async def get_file_ids(request: Request, secure_hash) -> Optional[FileId]:
     setattr(file_id, "file_name", media["file_name"])
     setattr(file_id, "file_size", media["file_size"])
     setattr(file_id, "mime_type", media["mime_type"])
-    setattr(file_id, "unique_id",  media["file_unique_id"])
+    setattr(file_id, "unique_id", media["file_unique_id"])
     return file_id
+
 
 def is_media(message):
     return next(

@@ -20,6 +20,7 @@ async def stream_latest(page: int = Query(1)):
         raise HTTPException(status_code=400, detail="Page must be positive integers")
 
     data = await db.get_tmdb_latest(page=page)
+
     if data is None:
         raise HTTPException(status_code=404, detail="Item not found")
 

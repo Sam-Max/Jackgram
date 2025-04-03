@@ -3,23 +3,24 @@ import re
 from jackgram.bot.bot import lock
 import PTN
 from jackgram.utils.tmdb import get_tmdb
+from typing import Dict, List, Union, Optional
 
 db = get_db()
 tmdb = get_tmdb()
 
 
-def get_file_title(file, message):
+def get_file_title(file, message) -> str:
     title = file.file_name or message.caption or file.file_id
     return title.replace("_", " ").replace(".", " ")
 
 
-def format_filename(title):
+def format_filename(title: str) -> str:
     title = re.sub(r"\s*[\[\(\{]?\s*@\w+\s*[\]\)\}]?\s*[-~]?\s*", "", title).strip()
     filename = re.sub(r"\.(?=[^.]*\.)", " ", title)
     return filename.replace(".", " ")
 
 
-async def extract_file_info(file, message, filename):
+async def extract_file_info(file, message, filename: str) -> Dict[str, Union[str, int]]:
     name = file.file_name
     size = file.file_size
     mime_type = file.mime_type
@@ -41,7 +42,7 @@ async def extract_file_info(file, message, filename):
     }
 
 
-async def get_media_details(data):
+async def get_media_details(data: Dict[str, Union[str, int]]) -> None:
     title = data.get("title")
     year = data.get("year")
     details = {}
@@ -68,7 +69,13 @@ async def get_media_details(data):
     data["episode_details"] = episode_details
 
 
-async def process_series(media_id, data, series_details, episode_details, file_info):
+async def process_series(
+    media_id: int,
+    data: Dict[str, Union[str, int]],
+    series_details: Dict,
+    episode_details: Dict,
+    file_info: Dict[str, Union[str, int]],
+) -> None:
     genres = [genre["name"] for genre in series_details.get("genres", [])]
     series_doc = {
         "tmdb_id": series_details.get("id"),
@@ -101,14 +108,12 @@ async def process_series(media_id, data, series_details, episode_details, file_i
     async with lock:
         existing_media = await db.get_tmdb(tmdb_id=media_id)
         if existing_media:
-            print("update_tmdb")
             await db.update_tmdb(existing_media, series_doc, "series")
         else:
-            print("add_tmdb")
             await db.add_tmdb(series_doc)
 
 
-async def process_files(file_info):
+async def process_files(file_info: Dict[str, Union[str, int]]) -> None:
     media_doc = {**file_info, "mode": "multi"}
 
     async with lock:
@@ -119,7 +124,11 @@ async def process_files(file_info):
             await db.add_media_file(media_doc)
 
 
-async def process_movie(media_id, media_details, file_info):
+async def process_movie(
+    media_id: int,
+    media_details: Dict,
+    file_info: Dict[str, Union[str, int]],
+) -> None:
     genres = [genre["name"] for genre in media_details.get("genres", [])]
     movie_doc = {
         "tmdb_id": media_details.get("id"),
@@ -137,14 +146,12 @@ async def process_movie(media_id, media_details, file_info):
     async with lock:
         existing_media = await db.get_tmdb(tmdb_id=media_id)
         if existing_media:
-            print("update_tmdb")
             await db.update_tmdb(existing_media, movie_doc, "movie")
         else:
-            print("add_tmdb")
             await db.add_tmdb(movie_doc)
 
 
-def extract_show_info_raw(data):
+def extract_show_info_raw(data: Dict) -> Dict:
     show_info = {
         "tmdb_id": data.get("tmdb_id"),
         "title": data.get("title"),
@@ -174,7 +181,7 @@ def extract_show_info_raw(data):
     return show_info
 
 
-def extract_movie_info_raw(data):
+def extract_movie_info_raw(data: Dict) -> Dict:
     movie_info = {
         "tmdb_id": data.get("tmdb_id"),
         "title": data.get("title"),
@@ -200,7 +207,9 @@ def extract_movie_info_raw(data):
     return movie_info
 
 
-def extract_show_info(data, season_num, episode_num, tmdb_id):
+def extract_show_info(
+    data: Dict, season_num: int, episode_num: int, tmdb_id: int
+) -> List[Dict]:
     show_info = []
     for season in data.get("seasons", []):
         if season.get("season_number") == int(season_num):
@@ -224,7 +233,7 @@ def extract_show_info(data, season_num, episode_num, tmdb_id):
     return show_info
 
 
-def extract_movie_info(data, tmdb_id):
+def extract_movie_info(data: Dict, tmdb_id: int) -> List[Dict]:
     movie_info = []
     release_date = data.get("release_date")
     runtime = data.get("runtime")
@@ -243,20 +252,20 @@ def extract_movie_info(data, tmdb_id):
     return movie_info
 
 
-async def extract_media_by_hash(data, hash):
+async def extract_media_by_hash(data: Dict, file_hash: str) -> Optional[Dict]:
     if data.get("type") == "tv":
         for season in data.get("seasons", []):
             for episode in season.get("episodes", []):
                 for info in episode["file_info"]:
-                    if info.get("hash") == hash:
+                    if info.get("hash") == file_hash:
                         return info
     elif data.get("type") == "movie":
         for info in data["file_info"]:
-            if info.get("hash") == hash:
+            if info.get("hash") == file_hash:
                 return info
 
 
-def get_readable_size(size_in_bytes):
+def get_readable_size(size_in_bytes: Union[int, str]) -> str:
     size_in_bytes = int(size_in_bytes) if str(size_in_bytes).isdigit() else 0
     if not size_in_bytes:
         return "0B"
@@ -296,9 +305,9 @@ def get_readable_time(seconds: int) -> str:
     return readable_time
 
 
-def generate_stream_url(tmdb_id, hash):
-    return f"{BASE_URL}/dl?tmdb_id={tmdb_id}&hash={hash}"
+def generate_stream_url(tmdb_id: int, file_hash: str) -> str:
+    return f"{BASE_URL}/dl?tmdb_id={tmdb_id}&hash={file_hash}"
 
 
-def generate_stream_url_file(hash):
-    return f"{BASE_URL}/dl?file_id={hash}&hash={hash}"
+def generate_stream_url_file(file_hash: str) -> str:
+    return f"{BASE_URL}/dl?file_id={file_hash}&hash={file_hash}"

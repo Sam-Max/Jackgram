@@ -22,10 +22,19 @@ from jackgram.utils.utils import (
 db = get_db()
 
 
-@Client.on_message(filters.command("start"))
+@StreamBot.on_message(filters.command("start"))
 async def start(bot, message):
     await message.reply_text(
-        "Welcome to JackgramBot!!. Click /index for more info or send a file to the logs channel to index it"
+        "👋 Welcome to JackgramBot!\n\n"
+        "📌 Use /index to index files from a channel.\n"
+        "🔍 Use /search to find indexed files.\n"
+        "🗑️ Use /del to delete an entry by its IMDb ID.\n"
+        "📊 Use /count to see the total number of entries in the database.\n"
+        "💾 Use /save_db to back up the database.\n"
+        "📂 Use /load_db to restore the database from a backup.\n"
+        "❌ Use /del_db to delete a specific database.\n"
+        "🔑 Use /token to generate an access token.\n\n"
+        "🚀 Send a file to the logs channel to index it automatically!"
     )
 
 
@@ -51,7 +60,9 @@ async def index(bot: Client, message: Message):
             return
     else:
         await message.reply(
-            text="Use /index chat_id first_id last_id client(bot or user)"
+            text="Usage: /index chat_id first_id last_id client_type\n\n"
+            "Example: /index 123456789 1 100 bot\n\n"
+            "Note: client_type must be either 'bot' or 'user'."
         )
         return
 
@@ -160,7 +171,11 @@ async def save_database(bot: Client, message: Message):
     with open(backup_file, "w") as file:
         json.dump(backup_data, file, indent=4)
 
-    await message.reply_text(f"Backup completed! Data saved in '{backup_file}'.")
+    await bot.send_document(
+        chat_id=message.chat.id,
+        document=backup_file,
+        caption="Backup completed! Here is your database backup file.",
+    )
 
 
 @StreamBot.on_message(filters.command("load_db") & filters.private)
