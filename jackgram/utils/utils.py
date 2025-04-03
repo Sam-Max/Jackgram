@@ -174,7 +174,7 @@ def extract_show_info_raw(data: Dict) -> Dict:
                     "quality": info.get("quality"),
                     "size": info.get("file_size"),
                     "url": generate_stream_url(
-                        tmdb_id=data.get("tmdb_id"), hash=info.get("hash")
+                        tmdb_id=data.get("tmdb_id"), file_hash=info.get("hash")
                     ),
                 }
                 show_info["files"].append(episode_info)
@@ -200,7 +200,7 @@ def extract_movie_info_raw(data: Dict) -> Dict:
             "quality": info.get("quality"),
             "size": info.get("file_size"),
             "url": generate_stream_url(
-                tmdb_id=data.get("tmdb_id"), hash=info.get("hash")
+                tmdb_id=data.get("tmdb_id"), file_hash=info.get("hash")
             ),
         }
         movie_info["files"].append(files_info)
@@ -226,7 +226,7 @@ def extract_show_info(
                             "quality": info.get("quality"),
                             "size": info.get("file_size"),
                             "url": generate_stream_url(
-                                tmdb_id=tmdb_id, hash=info.get("hash")
+                                tmdb_id=tmdb_id, file_hash=info.get("hash")
                             ),
                         }
                         show_info.append(episode_info)
@@ -246,7 +246,7 @@ def extract_movie_info(data: Dict, tmdb_id: int) -> List[Dict]:
             "duration": runtime,
             "quality": info.get("quality"),
             "size": info.get("file_size"),
-            "url": generate_stream_url(tmdb_id=tmdb_id, hash=info.get("hash")),
+            "url": generate_stream_url(tmdb_id=tmdb_id, file_hash=info.get("hash")),
         }
         movie_info.append(file_info)
     return movie_info

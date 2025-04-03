@@ -46,7 +46,7 @@ async def stream_files(page: int = Query(1)):
     for item in data:
         del item["_id"]
         item["name"] = "Telegram"
-        item["url"] = generate_stream_url_file(hash=item.get("hash"))
+        item["url"] = generate_stream_url_file(file_hash=item.get("hash"))
 
     return data
 
