@@ -88,7 +88,7 @@ def get_file_info(message):
 
 
 async def get_file_ids(request: Request, secure_hash) -> Optional[FileId]:
-    tmdb_id = int(request.query_params.get("tmdb_id"))
+    tmdb_id = request.query_params.get("tmdb_id")
     file_id = request.query_params.get("file_id")
 
     logging.info(
@@ -96,7 +96,7 @@ async def get_file_ids(request: Request, secure_hash) -> Optional[FileId]:
     )
 
     if tmdb_id:
-        data = await db.get_tmdb(tmdb_id)
+        data = await db.get_tmdb(int(tmdb_id))
         logging.info(f"get_file_ids: data={data}")
         if data:
             media = await extract_media_by_hash(data, secure_hash)
