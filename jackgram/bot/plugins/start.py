@@ -251,3 +251,16 @@ async def generate_token(client, message):
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
     await message.reply_text(token)
+
+
+@StreamBot.on_message(filters.command("log") & filters.private)
+async def send_log_file(bot: Client, message: Message):
+    log_file_path = os.path.join(os.getcwd(), "bot.log")
+    if os.path.exists(log_file_path):
+        await bot.send_document(
+            chat_id=message.chat.id,
+            document=log_file_path,
+            caption="Here is the bot.log file.",
+        )
+    else:
+        await message.reply_text("The bot.log file does not exist.")
