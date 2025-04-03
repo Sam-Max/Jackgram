@@ -2,12 +2,12 @@
 
 ## **Features**
 
-- Index files of public and private channel
-- API Rest with FastAPI
-- Auth token system.
-- Stream and download video files using an API endpoint
-- Database support with MongoDB
-- Tmdb API support
+- **Index Telegram Channel Files**: Index video files from public and private Telegram channels.
+- **FastAPI-Powered API**: Provides a robust and scalable REST API for accessing indexed data.
+- **Authentication System**: Secure API access using token-based authentication.
+- **Stream and Download Support**: Stream or download video files directly via API endpoints.
+- **MongoDB Integration**: Efficiently store and manage indexed data using MongoDB.
+- **TMDb API Integration**: Fetch metadata like titles, descriptions, and more from The Movie Database (TMDb).
 
 ## **Api Endpoints**
 
@@ -100,7 +100,7 @@
               "quality": "720p",
               "size": 65661748,
               "hash": "XXXXXX"
-            },
+            }
           ]
         }
       ]
@@ -117,7 +117,7 @@
     - `Authorization: Bearer <token>`
 
 - **Response:**
-  - Status: 
+  - Status:
     - `200 OK`: Full file download when no `Range` header is provided.
     - `206 Partial Content`: Partial file download when a valid `Range` header is included.
   - Body: Binary content of the requested media file or portion of it.
@@ -145,7 +145,6 @@ Add the following environment variables to your config.env file.
 - `SECRET_KEY`: | Secret key for encrypt and decrypt authentification tokens. `str`
 - `SLEEP_THRESHOLD`: | Set a sleep threshold for flood wait exceptions, defaut is `60`. `int`
 
-
 ### **Running using Docker Compose**
 
 docker-compose up -d
@@ -153,22 +152,20 @@ docker-compose up -d
 ### Bot Commands
 
 ```
-start - Welcome message
-index - Store files of an specific channel in the db
-search - Search a file on db by name
-del - Delete a file on the db
-count - Count all files on the db
-token - Generate a token to authorize using API
-save_db - Save the db to a json file
-load_db - Load a json file backup
-del_db - Delete a db by name
-
+start - Welcome message and commands help.
+index - Index channel files into the database.
+search - Search for files in the database.
+del - Remove a file from the database.
+count - Count all files in the database.
+token - Generate an API auth token.
+save_db - Backup the database to a JSON file.
+load_db - Restore the database from a JSON file.
+del_db - Delete the database.
 ```
 
 ## **Contact Info**
 
 [![Telegram Username](https://img.shields.io/static/v1?label=&message=Telegram%20&color=blueviolet&style=for-the-badge&logo=telegram&logoColor=black)](https://t.me/sammax09)
-
 
 ## Disclaimer:
 
