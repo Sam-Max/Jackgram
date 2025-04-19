@@ -104,23 +104,23 @@ async def search(bot: Client, message: Message):
         return
 
     results, _ = await db.search_tmdb(search_query)
-    if results:
-        if results[0]["type"] == "movie":
-            info = extract_movie_info(results[0])
-        else:
-            info = extract_show_info_raw(results[0])
-
-        results_list = "Results:\n\n"
-        count = 0
-        for i in info["files"]:
-            count += 1
-            name = i["title"]
-            link = generate_stream_url(tmdb_id=info["tmdb_id"], hash=i["hash"])
-            results_list += f"{count}. [{name}]({link})\n"
-
-        await message.reply_text(results_list)
-    else:
+    if not results:
         await message.reply_text("No results found.")
+        return
+
+    result = results[0]
+    info = (
+        extract_movie_info(result)
+        if result["type"] == "movie"
+        else extract_show_info_raw(result)
+    )
+
+    results_list = "\n".join(
+        f"{idx + 1}. [{file['title']}]({file['url']})"
+        for idx, file in enumerate(info["files"])
+    )
+
+    await message.reply_text(f"Results:\n\n{results_list}")
 
 
 @StreamBot.on_message(filters.command("del") & filters.private)
