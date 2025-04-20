@@ -1,7 +1,7 @@
 from fastapi.responses import JSONResponse
 from jackgram.bot.bot import SECRET_KEY
 from jackgram.server.routes import routes
-from jackgram.server.api.bot_api import stream_routes
+from jackgram.server.api.bot_api import stream_routes, search_routes
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 import jwt
@@ -29,4 +29,5 @@ app = FastAPI()
 
 app.include_router(routes)
 app.include_router(stream_routes)
+app.include_router(search_routes)
 # app.add_middleware(AuthMiddleware)

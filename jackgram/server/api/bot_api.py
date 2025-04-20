@@ -2,6 +2,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Query
 from jackgram.bot.bot import get_db
 from jackgram.utils.utils import (
+    extract_media_file_raw,
     extract_movie_info,
     extract_movie_info_raw,
     extract_show_info,
@@ -10,6 +11,7 @@ from jackgram.utils.utils import (
 )
 
 stream_routes = APIRouter(prefix="/stream")
+search_routes = APIRouter(prefix="")  # No prefix for search routes
 
 db = get_db()
 
@@ -85,34 +87,45 @@ async def stream_movie(tmdb_id):
         }
 
 
-@stream_routes.get("/search")
-async def stream_search(search_query: str = Query(..., alias="q"), page: int = Query(1)):
+
+
+@search_routes.get("/search")
+async def stream_search(
+    search_query: str = Query(..., alias="query"), page: int = Query(1)
+):
     try:
+
+        logging.info(f"Search query: {search_query}, Page: {page}")
+
         if not search_query:
             raise HTTPException(status_code=400, detail="Search query (q) is required")
 
         if page < 1:
-            raise HTTPException(status_code=400, detail="Page must be positive integers")
+            raise HTTPException(
+                status_code=400, detail="Page must be positive integers"
+            )
 
         results, total_count = await db.search_tmdb(search_query, page)
+
+        logging.info(f"Search results: {results}")
 
         if not results:
             raise HTTPException(status_code=404, detail="Item not found")
 
-        media_info = [
-            (
-                extract_movie_info_raw(result)
-                if result["type"] == "movie"
-                else extract_show_info_raw(result)
-            )
-            for result in results
-        ]
+        media_info = []
+        for result in results:
+            if result.get("type") == "movie":
+                media_info.append(extract_movie_info_raw(result))
+            elif result.get("type") == "tv":
+                media_info.append(extract_show_info_raw(result))
+            else:  # Handle media_file_collection results
+                media_info.append(extract_media_file_raw(result))
 
         return {
-                "page": page,
-                "total_count": total_count,
-                "results": media_info,
-            }
+            "page": page,
+            "total_count": total_count,
+            "results": media_info,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

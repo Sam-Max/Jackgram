@@ -3,7 +3,7 @@ import re
 from jackgram.bot.bot import lock
 import PTN
 from jackgram.utils.tmdb import get_tmdb
-from typing import Dict, List, Union, Optional
+from typing import Any, Dict, List, Union, Optional
 
 db = get_db()
 tmdb = get_tmdb()
@@ -210,6 +210,18 @@ def extract_movie_info_raw(data: Dict) -> Dict:
         }
         movie_info["files"].append(files_info)
     return movie_info
+
+
+def extract_media_file_raw(result: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "name": "Telegram",
+        "title": result.get("file_name"),
+        "type": "file",
+        "quality": result.get("quality"),
+        "size": result.get("file_size"),
+        "url": generate_stream_url_file(file_hash=result.get("hash")),
+    }
+
 
 
 def extract_show_info(

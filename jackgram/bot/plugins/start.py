@@ -15,7 +15,6 @@ from jackgram.bot.utils import index_channel
 from jackgram.utils.utils import (
     extract_movie_info,
     extract_show_info_raw,
-    generate_stream_url,
 )
 
 
