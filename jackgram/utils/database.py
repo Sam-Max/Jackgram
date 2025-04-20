@@ -48,10 +48,10 @@ class Database:
 
     async def get_tmdb(self, tmdb_id: int) -> Optional[Dict[str, Any]]:
         logging.info(f"Fetching TMDB data for ID: {tmdb_id}")
-        tmdb_data= await self.tmdb_collection.find_one({"tmdb_id": tmdb_id})
+        tmdb_data = await self.tmdb_collection.find_one({"tmdb_id": tmdb_id})
         logging.info(f"TMDB data: {tmdb_data}")
         return tmdb_data
-    
+
     async def update_tmdb(
         self, existing_media: Dict[str, Any], media_doc: Dict[str, Any], media_type: str
     ) -> None:
@@ -67,7 +67,7 @@ class Database:
             await self._update_movie(existing_media, media_doc)
 
         await self.tmdb_collection.replace_one({"tmdb_id": tmdb_id}, existing_media)
-    
+
     async def del_tdmb(self, tmdb_id: int) -> Any:
         return await self.tmdb_collection.delete_one({"tmdb_id": tmdb_id})
 
@@ -88,25 +88,44 @@ class Database:
         self, query: str, page: int = 1, per_page: int = 50
     ) -> Tuple[List[Dict[str, Any]], int]:
         words = query.split()
-        regex_query = {
+        tmdb_regex_query = {
             "title": {"$regex": ".*" + ".*".join(words) + ".*", "$options": "i"}
+        }
+        media_regex_query = {
+            "file_name": {"$regex": ".*" + ".*".join(words) + ".*", "$options": "i"}
         }
         skip = (int(page) - 1) * per_page
 
-        mydoc = (
-            self.tmdb_collection.find(regex_query)
+        # Search in tmdb_collection
+        tmdb_mydoc = (
+            self.tmdb_collection.find(tmdb_regex_query)
             .sort("msg_id", DESCENDING)
             .skip(skip)
             .limit(per_page)
         )
+        tmdb_results = await tmdb_mydoc.to_list(length=per_page)
+        tmdb_total_count = await self.tmdb_collection.count_documents(tmdb_regex_query)
 
-        results = await mydoc.to_list(length=per_page)
+        # Search in media_file_collection
+        media_mydoc = (
+            self.media_file_collection.find(media_regex_query)
+            .sort("_id", DESCENDING)
+            .skip(skip)
+            .limit(per_page)
+        )
+        media_results = await media_mydoc.to_list(length=per_page)
 
-        total_count = await self.tmdb_collection.count_documents(regex_query)
+        logging.info(f"Media results: {media_results}")
 
-        return results, total_count
+        media_total_count = await self.media_file_collection.count_documents(
+            media_regex_query
+        )
 
-    
+        # Combine results and total counts
+        combined_results = tmdb_results + media_results
+        combined_total_count = tmdb_total_count + media_total_count
+
+        return combined_results, combined_total_count
 
     async def _update_series(
         self, existing_media: Dict[str, Any], media_doc: Dict[str, Any]
