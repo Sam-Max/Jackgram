@@ -1,172 +1,181 @@
-### A telegram bot and web server with an API Rest, that indexes telegram channels videos files and serve the information through its API to build an url for stream or download.
+<div align="center">
 
-## **Features**
+# 🚀 Jackgram
 
-- **Index Telegram Channel Files**: Index video files from public and private Telegram channels.
-- **FastAPI-Powered API**: Provides a robust and scalable REST API for accessing indexed data.
-- **Authentication System**: Secure API access using token-based authentication.
-- **Stream and Download Support**: Stream or download video files directly via API endpoints.
-- **MongoDB Integration**: Efficiently store and manage indexed data using MongoDB.
-- **TMDb API Integration**: Fetch metadata like titles, descriptions, and more from The Movie Database (TMDb).
+### A Telegram Bot and REST API Server for indexing and streaming Telegram files.
 
-## **Api Endpoints**
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Pyrogram](https://img.shields.io/badge/Pyrogram-2.0+-3171A5.svg?logo=telegram&logoColor=white)](https://docs.pyrogram.org/)
+[![Docker](https://img.shields.io/badge/Docker-Supported-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 
-### GET /stream/series
+---
 
-- **Request:**
+Jackgram allows you to index media files from public and private Telegram channels, storing them in a searchable database and serving them via a high-performance REST API. Built with FastAPI and Pyrofork (Pyrogram fork), it's designed for speed, scalability, and ease of use.
 
-  - Method: `GET`
-  - URL: `/stream/series/{tmdb_id}:{season}:{episode}.json`
-  - Headers:
-    - `Authorization: Bearer <token>`
+[Features](#-features) • [Installation](#-getting-started) • [API Documentation](#-api-endpoints) • [Contact](#-contact-info)
 
-- **Response:**
-  - Status: `200 OK`
-  - Body:
-    ```json
-    {
-      "tmdb_id": "77163",
-      "streams": [
-        {
-          "name": "Telegram",
-          "title": "TV Show Title",
-          "date": "2021-12-31",
-          "duration": 33,
-          "quality": "720p",
-          "size": 263039472,
-          "hash": "XXXXXX"
-        }
-      ]
-    }
-    ```
+</div>
 
-### GET /stream/movie
+---
 
-- **Request:**
+## ✨ Features
 
-  - Method: `GET`
-  - URL: `/stream/movie/{tmdb_id}.json`
-  - Headers:
-    - `Authorization: Bearer <token>`
+- 📂 **Channel Indexing**: Automatically index video files from public and private Telegram channels.
+- ⚡ **FastAPI Powered**: High-performance REST API for lightning-fast data retrieval and streaming.
+- 🔐 **Secure Authentication**: Optional token-based authentication system to protect your API.
+- 📺 **Seamless Streaming**: Direct stream and download support with HTTP Range (Partial Content) support.
+- 🗄️ **MongoDB Integration**: Efficiently store and manage thousands of indexed files with ease.
+- 🎬 **TMDb Integration**: Automatically fetches rich metadata (titles, posters, plot) via The Movie Database API.
+- 🐳 **Docker Ready**: Deploy in seconds using Docker and Docker Compose.
+- 🔄 **Backup & Restore**: Easily backup your entire database to JSON and restore it whenever needed.
 
-- **Response:**
-  - Status: `200 OK`
-  - Body:
-    ```json
-    {
-      "tmdb_id": "592831",
-      "streams": [
-        {
-          "name": "Telegram",
-          "title": "Movie Title",
-          "date": "2024-09-25",
-          "duration": 138,
-          "quality": "720p",
-          "size": 1189639567,
-          "hash": "XXXXXX"
-        }
-      ]
-    }
-    ```
+---
 
-### GET /search
+## 🛠️ Getting Started
 
-- **Request:**
+### 🐳 Using Docker (Recommended)
 
-  - Method: `GET`
-  - URL: `/search?query=value1&page=value2`
-  - Headers:
-    - `Authorization: Bearer <token>`
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Sam-Max/Jackgram.git
+   cd Jackgram
+   ```
 
-- **Response:**
-  - Status: `200 OK`
-  - Body:
-    ```json
-    {
-      "page": 1,
-      "total_count": 1,
-      "results": [
-        {
-          "tmdb_id": 118956,
-          "type": "tv",
-          "country": "US",
-          "language": "en",
-          "files": [
-            {
-              "name": "Telegram",
-              "title": "TV Show or Movie Title",
-              "date": "2022-01-18",
-              "duration": 25,
-              "quality": "720p",
-              "size": 65661748,
-              "hash": "XXXXXX"
-            }
-          ]
-        }
-      ]
-    }
-    ```
+2. **Configure Environment:**
+   ```bash
+   cp sample_config.env config.env
+   # Open config.env and fill in your credentials
+   ```
 
-### GET /dl
+3. **Deploy:**
+   ```bash
+   docker-compose up -d
+   ```
 
-- **Request:**
+### 🐍 Local Installation
 
-  - Method: `GET`
-  - URL: `/dl/{tmdb_id}?hash=XXXXXX`
-  - Headers:
-    - `Authorization: Bearer <token>`
+1. **Install Requirements:**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-- **Response:**
-  - Status:
-    - `200 OK`: Full file download when no `Range` header is provided.
-    - `206 Partial Content`: Partial file download when a valid `Range` header is included.
-  - Body: Binary content of the requested media file or portion of it.
+2. **Setup MongoDB:**
+   Ensure you have a MongoDB instance running and accessible.
 
-## Setting up config file.
+3. **Run the application:**
+   ```bash
+   python3 -m jackgram
+   ```
 
-cp config_sample.env config.env
+---
 
-## Fill up Env Variables.
+## ⚙️ Configuration
 
-Add the following environment variables to your config.env file.
+Fill your `config.env` with these essential variables. You can get Telegram API credentials from [my.telegram.org](https://my.telegram.org/apps).
 
-- `API_ID`: (required) | Telegram api_id obtained from https://my.telegram.org/apps. `int`
-- `API_HASH`: (required) | Telegram api_hash obtained from https://my.telegram.org/apps. `str`
-- `BOT_TOKEN`: (required) | The Telegram Bot Token that you got from @BotFather `str`
-- `DATABASE_URL`:(required) | Your Mongo Database URL (Connection string). `str`. Default: `mongodb://admin:admin@mongo:27017`.
-- `BACKUP_DIR`: | Directory where to save the database file on json format. `str`. Default: `/app/database`.
-- `SESSION_STRING`: | Use same account which is a participant of the channels to index (necessary to index private channels)
-- `WORKERS` | Number of maximum concurrent workers for handling incoming updates, default is `10`. `int`
-- `LOGS_CHANNEL`: | Channel where the indexed video files will be saved. `int`
-- `TMDB_API`: | API token for tmdb authentification. `str`
-- `TMDB_LANGUAGE`: | Language for tmdb metadata. Default: "en-US". `str`
-- `BASE_URL`: (required) | Valid BASE URL where the bot is deployed. Format of URL should be `http://myip`, where myip is the IP/Domain(public) of your bot. `str`
-- `PORT`: | Port on which app should listen to, defaults to `5000`. `int`
-- `SECRET_KEY`: | Secret key for encrypt and decrypt authentification tokens. `str`
-- `SLEEP_THRESHOLD`: | Set a sleep threshold for flood wait exceptions, defaut is `60`. `int`
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `API_ID` | Your Telegram API ID | Required |
+| `API_HASH` | Your Telegram API Hash | Required |
+| `BOT_TOKEN` | Telegram Bot Token ([@BotFather](https://t.me/BotFather)) | Required |
+| `TMDB_API` | TMDb API Key | Required |
+| `LOGS_CHANNEL` | Channel ID where indexed data is stored | Required |
+| `BASE_URL` | Public IP/Domain of your server | Required |
+| `DATABASE_URL` | MongoDB connection string | `mongodb://admin:admin@mongo:27017` |
+| `SESSION_STRING` | Pyrogram session string (for private channels) | Optional |
+| `USE_TOKEN_SYSTEM` | Enable/Disable API token system | `True` |
+| `SECRET_KEY` | Secret key for JWT encryption | `your-secret-token` |
+| `PORT` | Web server port | `5000` |
+| `WORKERS` | Number of concurrent workers | `10` |
 
-### **Running using Docker Compose**
+---
 
-docker-compose up -d
+## 🤖 Bot Commands
 
-### Bot Commands
+The bot provides a set of admin commands to manage your index:
 
-```
-start - Welcome message and commands help.
-index - Index channel files into the database.
-search - Search for files in the database.
-del - Remove a file from the database.
-count - Count all files in the database.
-token - Generate an API auth token.
-save_db - Backup the database to a JSON file.
-load_db - Restore the database from a JSON file.
-del_db - Delete the database.
-```
+| Command | Description |
+| :--- | :--- |
+| `/start` | Show welcome message and available commands. |
+| `/index` | Start indexing a specific Telegram channel. |
+| `/search` | Search indexed files directly via the bot. |
+| `/token` | Generate a new API authentication token. |
+| `/count` | Display total number of indexed files. |
+| `/save_db` | Export the current database to a JSON backup. |
+| `/load_db` | Restore the database from a JSON backup file. |
+| `/del_db` | Wipe the entire database index. |
 
-## **Contact Info**
+---
 
-[![Telegram Username](https://img.shields.io/static/v1?label=&message=Telegram%20&color=blueviolet&style=for-the-badge&logo=telegram&logoColor=black)](https://t.me/sammax09)
+## 📡 API Endpoints
 
-## Disclaimer:
+All API requests require the `Authorization: Bearer <token>` header if `USE_TOKEN_SYSTEM` is enabled.
 
-This bot should only be used to access movies and TV series not protected by copyright.
+### 📽️ Media Streaming
+- **Series:** `GET /stream/series/{tmdb_id}:{season}:{episode}.json`
+  ```json
+  {
+    "tmdb_id": "77163",
+    "streams": [
+      {
+        "name": "Telegram",
+        "title": "TV Show Title",
+        "quality": "720p",
+        "size": 263039472,
+        "hash": "XXXXXX"
+      }
+    ]
+  }
+  ```
+- **Movie:** `GET /stream/movie/{tmdb_id}.json`
+  ```json
+  {
+    "tmdb_id": "592831",
+    "streams": [
+      {
+        "name": "Telegram",
+        "title": "Movie Name",
+        "quality": "1080p",
+        "size": 1189639567,
+        "hash": "XXXXXX"
+      }
+    ]
+  }
+  ```
+- **Download:** `GET /dl?hash={file_hash}` (Supports Range headers for seeking)
+
+### 🔍 Discovery & Search
+- **Search:** `GET /search?query={q}&page={n}`
+- **Latest:** `GET /stream/latest?page={n}`
+- **Raw Files:** `GET /stream/files?page={n}`
+
+### 📊 System
+- **Status:** `GET /status` (Check if server and bot are online)
+
+---
+
+## ❤️ Support & Donation
+
+If you like this project and want to support its development, consider buying me a coffee!
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/sammax)
+
+---
+
+## 📞 Contact Info
+
+Join our Telegram for updates, support, and discussions:
+
+[![Telegram Channel](https://img.shields.io/badge/Telegram-26A6E2?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/samysosa08)
+
+---
+
+## ⚖️ License & Disclaimer
+
+Index and serve at your own risk. This tool is for educational purposes only and the author is not responsible for what you index.
+
+Distributed under the **GNU GPL v3 License**.
+
+> **Disclaimer:** This bot should only be used to access movies and TV series not protected by copyright.

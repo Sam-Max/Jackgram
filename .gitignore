@@ -81,8 +81,8 @@ env.bak/
 venv.bak/
 
 #session files
-*.session
-*.session-journal
+# *.session
+# *.session-journal
 
 .env
 test.py
