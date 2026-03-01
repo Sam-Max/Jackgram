@@ -42,6 +42,7 @@ async def start_services():
 
     import jackgram.bot.plugins.start
     import jackgram.bot.plugins.stream
+    import jackgram.bot.plugins.wizard
     from jackgram.utils.telegram_stream import multi_session_manager
 
     logging.info("Initializing Bot Client...")

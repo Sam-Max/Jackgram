@@ -1,0 +1,176 @@
+import asyncio
+import logging
+import re
+import PTN
+
+from telethon import events, Button
+from telethon.tl.types import Message
+
+from jackgram.bot.bot import StreamBot, LOGS_CHANNEL
+from jackgram.bot.utils import send_message
+from jackgram.utils.utils import (
+    extract_file_info,
+    format_filename,
+    get_file_title,
+    process_movie,
+    process_series,
+)
+from jackgram.utils.tmdb import get_tmdb
+
+tmdb = get_tmdb()
+
+
+@StreamBot.on(
+    events.NewMessage(
+        func=lambda e: e.is_private and (e.document or getattr(e, "video", None))
+    )
+)
+async def wizard_start(event: Message):
+    # Ignore commands disguised as captions
+    if event.text and event.text.startswith("/"):
+        return
+
+    chat_id = event.chat_id
+    sender_id = event.sender_id
+
+    async with StreamBot.conversation(chat_id, timeout=120) as conv:
+        try:
+            # Step 1: Ask for media type
+            prompt_msg = await conv.send_message(
+                "🧙‍♂️ **User Contribution Wizard**\n\nI detected a media file. Is this a Movie or a TV Show?",
+                buttons=[
+                    [
+                        Button.inline("🎬 Movie", b"movie"),
+                        Button.inline("📺 TV Show", b"series"),
+                    ],
+                    [Button.inline("❌ Cancel", b"cancel")],
+                ],
+            )
+
+            res = await conv.wait_event(
+                events.CallbackQuery(func=lambda e: e.sender_id == sender_id)
+            )
+            action = res.data.decode()
+
+            if action == "cancel":
+                await res.edit("❌ Wizard cancelled.")
+                return
+
+            media_type = action
+            type_str = "Movie" if media_type == "movie" else "TV Show"
+            await res.edit(f"✅ Selected: **{type_str}**")
+
+            # Step 2: Ask for TMDb ID or title
+            await conv.send_message(
+                f"Please send the **TMDb ID** or the **exact title** of the {type_str}."
+            )
+            reply = await conv.get_response()
+            query = reply.text.strip()
+
+            # Search TMDb
+            tmdb_id = None
+            if query.isdigit():
+                tmdb_id = int(query)
+            else:
+                wait_msg = await conv.send_message("🔍 Searching TMDb...")
+                tmdb_id = await asyncio.to_thread(tmdb.find_media_id, query, media_type)
+                await wait_msg.delete()
+
+            if not tmdb_id:
+                await conv.send_message(
+                    "❌ Could not find a match on TMDb. Wizard cancelled."
+                )
+                return
+
+            # Fetch details
+            details = await asyncio.to_thread(tmdb.get_details, tmdb_id, media_type)
+            if not details or "id" not in details:
+                await conv.send_message(
+                    "❌ Failed to fetch TMDb details. Wizard cancelled."
+                )
+                return
+
+            title = details.get("title") or details.get("name")
+            year = (
+                details.get("release_date")
+                or details.get("first_air_date")
+                or "Unknown"
+            )
+            if year and "-" in year:
+                year = year.split("-")[0]
+
+            # Step 3: Handle TV Show specific data (Season/Episode)
+            season, episode = None, None
+            if media_type == "series":
+                # Try to parse from filename first
+                filename = format_filename(get_file_title(event))
+                ptn_data = PTN.parse(filename)
+                season = ptn_data.get("season")
+                episode = ptn_data.get("episode")
+
+                if season is None or episode is None:
+                    await conv.send_message(
+                        "This is a TV Show, but I couldn't detect the Season and Episode from the filename.\n\nPlease reply with Season and Episode in the format: `S01E05`"
+                    )
+                    se_reply = await conv.get_response()
+                    se_text = se_reply.text.strip().upper()
+
+                    match = re.match(r"S(\d+)E(\d+)", se_text)
+                    if match:
+                        season = int(match.group(1))
+                        episode = int(match.group(2))
+                    else:
+                        await conv.send_message("❌ Invalid format. Wizard cancelled.")
+                        return
+
+            # Step 4: Confirmation
+            confirm_text = f"🍿 **Confirm Indexing**\n\nTitle: **{title}** ({year})\nType: **{type_str}**"
+            if media_type == "series":
+                confirm_text += f"\nSeason: **{season}** | Episode: **{episode}**"
+
+            confirm_msg = await conv.send_message(
+                confirm_text,
+                buttons=[
+                    [Button.inline("✅ Confirm & Index", b"confirm")],
+                    [Button.inline("❌ Cancel", b"cancel")],
+                ],
+            )
+
+            res_confirm = await conv.wait_event(
+                events.CallbackQuery(func=lambda e: e.sender_id == sender_id)
+            )
+            if res_confirm.data.decode() != "confirm":
+                await res_confirm.edit("❌ Wizard cancelled.")
+                return
+
+            await res_confirm.edit("⏳ Indexing...")
+
+            # Step 5: Process and Index
+            # Forward the message to the logs channel to safely store it
+            log_msg = await send_message(StreamBot, event, LOGS_CHANNEL)
+
+            # Extract file info from the new log message
+            final_filename = format_filename(get_file_title(log_msg))
+            file_info = await extract_file_info(log_msg, final_filename)
+
+            # Save to Database
+            if media_type == "movie":
+                await process_movie(tmdb_id, details, file_info)
+            else:
+                ep_details = await asyncio.to_thread(
+                    tmdb.get_episode_details, tmdb_id, episode, season
+                )
+                data = {"season": season, "episode": episode}
+                await process_series(tmdb_id, data, details, ep_details, file_info)
+
+            await conv.send_message(
+                "🎉 **Successfully Indexed!**\n\nThe media has been validated by you and perfectly added to the database."
+            )
+
+        except asyncio.TimeoutError:
+            await conv.send_message(
+                "⏳ Wizard timed out. Please send the file again to restart."
+            )
+        except Exception as e:
+            logging.error(f"Wizard error: {e}")
+            await conv.send_message("❌ An unexpected error occurred while processing.")

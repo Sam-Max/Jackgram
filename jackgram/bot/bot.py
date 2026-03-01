@@ -35,6 +35,7 @@ LOGS_CHANNEL = getenv("LOGS_CHANNEL")
 if not LOGS_CHANNEL:
     logging.error("LOGS_CHANNEL variable is missing! Exiting now")
     sys.exit(1)
+LOGS_CHANNEL = int(LOGS_CHANNEL)
 
 TMDB_API = getenv("TMDB_API")
 if not TMDB_API:
