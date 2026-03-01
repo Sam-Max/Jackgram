@@ -7,12 +7,12 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Pyrogram](https://img.shields.io/badge/Pyrogram-2.0+-3171A5.svg?logo=telegram&logoColor=white)](https://docs.pyrogram.org/)
+[![Telethon](https://img.shields.io/badge/Telethon-1.24+-3171A5.svg?logo=telegram&logoColor=white)](https://docs.telethon.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 
 ---
 
-Jackgram allows you to index media files from public and private Telegram channels, storing them in a searchable database and serving them via a high-performance REST API. Built with FastAPI and Pyrofork (Pyrogram fork), it's designed for speed, scalability, and ease of use.
+Jackgram allows you to index media files from public and private Telegram channels, storing them in a searchable database and serving them via a high-performance REST API. Built with FastAPI and Telethon, it's designed for speed, scalability, and ease of use. Leveraging FastTelethon for parallel chunky downloads, it ensures high-speed streaming even for large files.
 
 [Features](#-features) • [Installation](#-getting-started) • [API Documentation](#-api-endpoints) • [Contact](#-contact-info)
 
@@ -84,7 +84,7 @@ Fill your `config.env` with these essential variables. You can get Telegram API 
 | `LOGS_CHANNEL` | Channel ID where indexed data is stored | Required |
 | `BASE_URL` | Public IP/Domain of your server | Required |
 | `DATABASE_URL` | MongoDB connection string | `mongodb://admin:admin@mongo:27017` |
-| `SESSION_STRING` | Pyrogram session string (for private channels) | Optional |
+| `SESSION_STRING` | Telethon session string (for private channels) | Optional |
 | `USE_TOKEN_SYSTEM` | Enable/Disable API token system | `True` |
 | `SECRET_KEY` | Secret key for JWT encryption | `your-secret-token` |
 | `PORT` | Web server port | `5000` |
