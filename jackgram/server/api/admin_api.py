@@ -53,9 +53,12 @@ class MovieUpdate(BaseModel):
 
 @admin_routes.get("/movies")
 async def list_movies(
-    page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100)
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("date", pattern="^(date|title|rating|size)$"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
 ):
-    data = await db.get_movies(page=page, per_page=per_page)
+    data = await db.get_movies(page=page, per_page=per_page, sort_by=sort_by, sort_order=sort_order)
     total = await db.count_movies()
     return {
         "page": page,
@@ -112,8 +115,13 @@ class TVUpdate(BaseModel):
 
 
 @admin_routes.get("/tv")
-async def list_tv(page: int = Query(1, ge=1), per_page: int = Query(20, ge=1, le=100)):
-    data = await db.get_tv(page=page, per_page=per_page)
+async def list_tv(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    sort_by: str = Query("date", pattern="^(date|title|rating)$"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+):
+    data = await db.get_tv(page=page, per_page=per_page, sort_by=sort_by, sort_order=sort_order)
     total = await db.count_tv()
     return {
         "page": page,

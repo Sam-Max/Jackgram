@@ -1,7 +1,7 @@
 import logging
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import DuplicateKeyError
-from pymongo import DESCENDING
+from pymongo import ASCENDING, DESCENDING
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -98,25 +98,56 @@ class Database:
         tmdb_total = tmdb_result[0]["total"] if tmdb_result else 0
         return raw_total + tmdb_total
 
+    _SORT_FIELD_MAP = {
+        "date": "release_date",
+        "title": "title",
+        "rating": "rating",
+        "size": "_total_size",  # requires aggregation pipeline
+    }
+
     async def get_movies(
-        self, page: int, per_page: int = 20
+        self,
+        page: int,
+        per_page: int = 20,
+        sort_by: str = "date",
+        sort_order: str = "desc",
     ) -> List[Dict[str, Any]]:
         skip = (page - 1) * per_page
+        direction = ASCENDING if sort_order == "asc" else DESCENDING
+
+        if sort_by == "size":
+            # Use aggregation to sort by total file size
+            pipeline = [
+                {"$match": {"type": "movie"}},
+                {"$addFields": {"_total_size": {"$sum": "$file_info.file_size"}}},
+                {"$sort": {"_total_size": 1 if sort_order == "asc" else -1}},
+                {"$skip": skip},
+                {"$limit": per_page},
+            ]
+            return await self.tmdb_collection.aggregate(pipeline).to_list(length=per_page)
+
+        mongo_field = self._SORT_FIELD_MAP.get(sort_by, "_id")
         cursor = (
             self.tmdb_collection.find({"type": "movie"})
-            .sort("_id", -1)
+            .sort(mongo_field, direction)
             .skip(skip)
             .limit(per_page)
         )
         return await cursor.to_list(length=per_page)
 
     async def get_tv(
-        self, page: int, per_page: int = 20
+        self,
+        page: int,
+        per_page: int = 20,
+        sort_by: str = "date",
+        sort_order: str = "desc",
     ) -> List[Dict[str, Any]]:
         skip = (page - 1) * per_page
+        direction = ASCENDING if sort_order == "asc" else DESCENDING
+        mongo_field = self._SORT_FIELD_MAP.get(sort_by, "_id")
         cursor = (
             self.tmdb_collection.find({"type": "tv"})
-            .sort("_id", -1)
+            .sort(mongo_field, direction)
             .skip(skip)
             .limit(per_page)
         )
