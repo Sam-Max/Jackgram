@@ -58,7 +58,9 @@ async def list_movies(
     sort_by: str = Query("date", pattern="^(date|title|rating|size)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
 ):
-    data = await db.get_movies(page=page, per_page=per_page, sort_by=sort_by, sort_order=sort_order)
+    data = await db.get_movies(
+        page=page, per_page=per_page, sort_by=sort_by, sort_order=sort_order
+    )
     total = await db.count_movies()
     return {
         "page": page,
@@ -121,7 +123,9 @@ async def list_tv(
     sort_by: str = Query("date", pattern="^(date|title|rating)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
 ):
-    data = await db.get_tv(page=page, per_page=per_page, sort_by=sort_by, sort_order=sort_order)
+    data = await db.get_tv(
+        page=page, per_page=per_page, sort_by=sort_by, sort_order=sort_order
+    )
     total = await db.count_tv()
     return {
         "page": page,
@@ -341,3 +345,35 @@ async def session_verify_code(payload: SessionVerifyCodePayload):
             await client.disconnect()
             if phone in _session_clients:
                 del _session_clients[phone]
+
+
+# ---------------------------------------------------------------------------
+# System Health & Bot Load Dashboard
+# ---------------------------------------------------------------------------
+
+from jackgram.server.routes import active_streams
+from jackgram.utils.telegram_stream import multi_session_manager
+
+
+@admin_routes.get("/system-stats")
+async def get_system_stats():
+    clients = []
+    # Count connected sessions and their DC id safely
+    for client in multi_session_manager._clients:
+        is_conn = client.is_connected()
+        dc_id = getattr(client.session, "dc_id", 0) if is_conn else 0
+        clients.append({"connected": is_conn, "dc_id": dc_id})
+
+    return {
+        "clients_total": len(multi_session_manager._clients),
+        "clients_connected": sum(1 for c in clients if c["connected"]),
+        "clients_info": clients,
+        "active_streams": list(active_streams.values()),
+        "cache_size": len(multi_session_manager._media_info_cache),
+    }
+
+
+@admin_routes.post("/system-stats/clear-cache")
+async def clear_system_cache():
+    multi_session_manager._media_info_cache.clear()
+    return {"status": "ok", "cleared": True}

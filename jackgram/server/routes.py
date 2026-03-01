@@ -9,12 +9,19 @@ from fastapi.responses import StreamingResponse
 from jackgram.bot.bot import StreamBot, get_db
 from jackgram.server.exceptions import FileNotFound, InvalidHash
 
+import uuid
+import time
+from typing import Dict, Any
+
 from jackgram.utils.file_properties import get_file_info_dict
 from jackgram.utils.telegram_stream import (
     multi_session_manager,
     TelegramMediaRef,
     ParallelTransferrer,
 )
+
+active_streams: Dict[str, Dict[str, Any]] = {}
+
 from telethon.errors import (
     FloodWaitError,
     ChannelPrivateError,
@@ -125,14 +132,51 @@ async def media_streamer(request: Request, secure_hash: str):
         await multi_session_manager._resolve_file_location(ref, file_size)
     )
 
+    async def _stream_tracker(
+        stream_id: str, filename: str, file_size: int, generator, dc_id: int
+    ):
+        active_streams[stream_id] = {
+            "id": stream_id,
+            "filename": filename,
+            "size": file_size,
+            "bytes_sent": 0,
+            "start_time": time.time(),
+            "speed": 0.0,
+            "dc_id": dc_id,
+        }
+        last_time = time.time()
+        last_bytes = 0
+
+        try:
+            async for chunk in generator:
+                active_streams[stream_id]["bytes_sent"] += len(chunk)
+                now = time.time()
+                elapsed = now - last_time
+                if elapsed > 1.0:
+                    speed = (
+                        active_streams[stream_id]["bytes_sent"] - last_bytes
+                    ) / elapsed
+                    active_streams[stream_id]["speed"] = speed
+                    last_time = now
+                    last_bytes = active_streams[stream_id]["bytes_sent"]
+                yield chunk
+        except Exception as e:
+            logging.error(f"Stream interrupted: {e}")
+            raise
+        finally:
+            active_streams.pop(stream_id, None)
+
     # Stream the file using ParallelTransferrer
     transferrer = ParallelTransferrer(multi_session_manager, dc_id=dc_id)
-    body = transferrer.download(
+    generator_body = transferrer.download(
         file=file_location,
         file_size=file_size,
         offset=from_bytes,
         limit=req_length,
     )
+
+    stream_id = str(uuid.uuid4())
+    body = _stream_tracker(stream_id, file_name, file_size, generator_body, dc_id)
 
     headers = {
         "Content-Type": content_type,
