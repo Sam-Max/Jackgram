@@ -26,6 +26,8 @@ Jackgram allows you to index media files from public and private Telegram channe
 - 🌐 **Web Admin Dashboard**: Manage indexed files, generate session strings, and view media in a responsive web UI with light/dark themes.
 - 🧠 **Interactive Contribution Wizard**: Crowdsource media indexing with an intuitive Telegram bot wizard.
 - 🚀 **Multi-Account Streaming**: Distribute MTProto streaming load across multiple Telegram accounts for enhanced speed and reliability.
+- 🔐 **Command Authorization**: Restrict bot command access to specific Telegram user IDs for production security.
+- 📊 **Real-time Progress**: Live indexing progress bars and detailed status updates within the Telegram bot.
 - 🏷️ **Smart Metadata Extraction**: Integrated PTT (Parse Torrent Title) for accurate extraction of resolution, codecs, and release groups from filenames.
 - ⚡ **FastAPI Powered**: High-performance REST API for lightning-fast data retrieval and streaming.
 - 🔐 **Secure Authentication**: Optional token-based authentication system to protect your API.
@@ -96,6 +98,8 @@ Fill your `config.env` with these essential variables. You can get Telegram API 
 | `INDEX_MIN_SIZE_MB` | Minimum file size to index (in MB) | Optional |
 | `INDEX_ADULT_KEYWORDS` | Comma-separated list of keywords to ignore files | Optional |
 | `INDEX_ALLOWED_EXTENSIONS`| Comma-separated list of permitted extensions (e.g. `.mkv,.mp4`) | Optional |
+| `ADMIN_IDS` | Comma-separated Telegram User IDs allowed to run bot commands | Default: All (unsecured) |
+| `BACKUP_DIR` | Directory where database backups are stored | `./database` |
 
 ---
 
@@ -105,14 +109,16 @@ The bot provides a set of admin commands to manage your index:
 
 | Command | Description |
 | :--- | :--- |
-| `/start` | Show welcome message and available commands. |
-| `/index` | Start indexing a specific Telegram channel. |
-| `/search` | Search indexed files directly via the bot. |
-| `/token` | Generate a new API authentication token. |
-| `/count` | Display total number of indexed files. |
+| `/start` | Show welcome message and categorized command list. |
+| `/index` | Interactive wizard or direct command to index a channel with live progress. |
+| `/search` | Search indexed files (Movies, TV Shows, and Raw Files) via the bot. |
+| `/count` | Detailed database stats including breakdown by type and total storage used. |
+| `/del` | Delete an entry from the index by providing its TMDb ID. |
 | `/save_db` | Export the current database to a JSON backup. |
-| `/load_db` | Restore the database from a JSON backup file. |
-| `/del_db` | Wipe the entire database index. |
+| `/load_db` | Restore the database by replying to a JSON backup file. |
+| `/del_db` | Safely wipe a database index with inline confirmation buttons. |
+| `/log` | Download the current `bot.log` file for deubgging. |
+| `/token` | Generate a new API authentication token for external clients. |
 
 ---
 
