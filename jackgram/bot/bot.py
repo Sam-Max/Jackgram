@@ -41,7 +41,21 @@ if not TMDB_API:
     logging.error("TMDB_API variable is missing! Exiting now")
     sys.exit(1)
 
-SESSION_STRING = getenv("SESSION_STRING", "")
+import json
+
+SESSION_STRINGS = []
+_session_strings_env = getenv("SESSION_STRING", getenv("SESSION_STRINGS", ""))
+if _session_strings_env:
+    # Try parsing as JSON array first, fallback to comma-separated
+    try:
+        SESSION_STRINGS = json.loads(_session_strings_env)
+        if not isinstance(SESSION_STRINGS, list):
+            SESSION_STRINGS = [str(SESSION_STRINGS)]
+    except json.JSONDecodeError:
+        SESSION_STRINGS = [
+            s.strip() for s in _session_strings_env.split(",") if s.strip()
+        ]
+
 DATABASE_URL = getenv("DATABASE_URL", "mongodb://admin:admin@mongo:27017")
 BACKUP_DIR = getenv("BACKUP_DIR", "/app/database")
 SLEEP_THRESHOLD = int(getenv("SLEEP_THRESHOLD", "60"))
@@ -67,12 +81,6 @@ PING_INTERVAL = int(getenv("PING_INTERVAL", "1200"))
 
 StreamBot = TelegramClient(
     "stream_bot",
-    api_id=API_ID,
-    api_hash=API_HASH,
-)
-
-StreamUser = TelegramClient(
-    StringSession(SESSION_STRING),
     api_id=API_ID,
     api_hash=API_HASH,
 )

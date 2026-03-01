@@ -9,8 +9,9 @@ from bson.objectid import ObjectId
 from telethon import events
 from telethon.errors import FloodWaitError
 
-from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot, StreamUser
+from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot
 from jackgram.bot.utils import index_channel
+from jackgram.utils.telegram_stream import multi_session_manager
 from jackgram.utils.utils import (
     extract_movie_info,
     extract_show_info_raw,
@@ -48,7 +49,7 @@ async def index(event):
         if client_type == "bot":
             client = StreamBot
         elif client_type == "user":
-            client = StreamUser
+            client = await multi_session_manager.get_client()
         else:
             await event.reply("Invalid client type.")
             return

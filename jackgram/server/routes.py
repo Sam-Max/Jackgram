@@ -11,7 +11,7 @@ from jackgram.server.exceptions import FileNotFound, InvalidHash
 
 from jackgram.utils.file_properties import get_file_info_dict
 from jackgram.utils.telegram_stream import (
-    TelegramSessionManager,
+    multi_session_manager,
     TelegramMediaRef,
     ParallelTransferrer,
 )
@@ -19,7 +19,6 @@ from jackgram.utils.telegram_stream import (
 routes = APIRouter()
 
 db = get_db()
-session_manager = TelegramSessionManager()
 
 
 @routes.get("/status")
@@ -92,17 +91,17 @@ async def media_streamer(request: Request, secure_hash: str):
 
     req_length = until_bytes - from_bytes + 1
 
-    # Initialize TelegramSessionManager to get client client and reference
-    client = await session_manager.get_client()
+    # Initialize MultiSessionManager to get client client and reference
+    client = await multi_session_manager.get_client()
     ref = TelegramMediaRef(chat_id=chat_id, message_id=message_id)
 
     # Pre-validate file access
     file_location, dc_id, actual_size_res = (
-        await session_manager._resolve_file_location(ref, file_size)
+        await multi_session_manager._resolve_file_location(ref, file_size)
     )
 
     # Stream the file using ParallelTransferrer
-    transferrer = ParallelTransferrer(client, dc_id=dc_id)
+    transferrer = ParallelTransferrer(multi_session_manager, dc_id=dc_id)
     body = transferrer.download(
         file=file_location,
         file_size=file_size,

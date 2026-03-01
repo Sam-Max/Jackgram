@@ -7,10 +7,8 @@ import logging.handlers as handlers
 from jackgram.bot.bot import (
     BIND_ADDRESS,
     PORT,
-    SESSION_STRING,
     BOT_TOKEN,
     StreamBot,
-    StreamUser,
 )
 from jackgram import app
 
@@ -44,14 +42,14 @@ async def start_services():
 
     import jackgram.bot.plugins.start
     import jackgram.bot.plugins.stream
+    from jackgram.utils.telegram_stream import multi_session_manager
 
     logging.info("Initializing Bot Client...")
 
     await StreamBot.start(bot_token=BOT_TOKEN)
 
-    if len(SESSION_STRING) != 0:
-        logging.info(f"Initializing User Client...")
-        await StreamUser.start()
+    logging.info(f"Initializing User Clients...")
+    await multi_session_manager.initialize_all()
 
     logging.info("Services Started")
 
@@ -62,8 +60,10 @@ async def start_services():
 
 
 async def cleanup(web_task):
+    from jackgram.utils.telegram_stream import multi_session_manager
+
     await StreamBot.disconnect()
-    await StreamUser.disconnect()
+    await multi_session_manager.close_all()
     web_task.cancel()
 
 

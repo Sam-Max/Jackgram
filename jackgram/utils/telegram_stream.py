@@ -43,7 +43,7 @@ from telethon.tl.types import (
     Photo,
 )
 
-from jackgram.bot.bot import API_ID, API_HASH, BOT_TOKEN, SESSION_STRING, WORKERS
+from jackgram.bot.bot import API_ID, API_HASH, BOT_TOKEN, WORKERS
 
 logger = logging.getLogger(__name__)
 
@@ -305,20 +305,21 @@ class DownloadSender:
 
 class ParallelTransferrer:
     """
-    Parallel chunk downloader using multiple DC connections.
+    Parallel chunk downloader using multiple DC connections and multiple accounts.
 
-    Based on FastTelethon technique from mautrix-telegram.
-    Creates multiple MTProtoSender connections to the same DC
-    and downloads different chunks in parallel for maximum speed.
+    Based on FastTelethon technique from mautrix-telegram, expanded to
+    utilize multiple Telegram Client sessions if available.
     """
 
-    def __init__(self, client: TelegramClient, dc_id: Optional[int] = None) -> None:
-        self.client = client
-        self.loop = client.loop
-        self.dc_id = dc_id or client.session.dc_id
-        self.auth_key: Optional[AuthKey] = (
-            None if dc_id and client.session.dc_id != dc_id else client.session.auth_key
-        )
+    def __init__(
+        self, manager: "MultiSessionManager", dc_id: Optional[int] = None
+    ) -> None:
+        self.manager = manager
+
+        # Keep loop reference from the first available client or asyncio event loop
+        self.loop = asyncio.get_event_loop()
+
+        self.dc_id = dc_id
         self.senders: Optional[list[DownloadSender]] = None
 
     async def _cleanup(self) -> None:
@@ -344,29 +345,38 @@ class ParallelTransferrer:
             return max_count
         return max(1, math.ceil((file_size / full_size) * max_count))
 
-    async def _create_sender(self) -> MTProtoSender:
-        """Create a new MTProtoSender connection to the DC."""
-        dc = await self.client._get_dc(self.dc_id)
-        sender = MTProtoSender(self.auth_key, loggers=self.client._log)
+    async def _create_sender(self) -> tuple[TelegramClient, MTProtoSender]:
+        """Create a new MTProtoSender connection to the DC from the session manager pool."""
+        client = await self.manager.get_client()
+
+        # If dc_id not specified, default to client's primary DC
+        dc_id = self.dc_id or client.session.dc_id
+        dc = await client._get_dc(dc_id)
+
+        auth_key = client.session.auth_key if dc_id == client.session.dc_id else None
+
+        sender = MTProtoSender(auth_key, loggers=client._log)
         await sender.connect(
-            self.client._connection(
+            client._connection(
                 dc.ip_address,
                 dc.port,
                 dc.id,
-                loggers=self.client._log,
-                proxy=self.client._proxy,
+                loggers=client._log,
+                proxy=client._proxy,
             )
         )
-        if not self.auth_key:
-            logger.debug(f"Exporting auth to DC {self.dc_id}")
-            auth = await self.client(ExportAuthorizationRequest(self.dc_id))
-            self.client._init_request.query = ImportAuthorizationRequest(
+        if not auth_key:
+            logger.debug(
+                f"[Parallel] Exporting auth to DC {dc_id} for session {id(client.session.auth_key)}"
+            )
+            auth = await client(ExportAuthorizationRequest(dc_id))
+            client._init_request.query = ImportAuthorizationRequest(
                 id=auth.id, bytes=auth.bytes
             )
-            req = InvokeWithLayerRequest(LAYER, self.client._init_request)
+            req = InvokeWithLayerRequest(LAYER, client._init_request)
             await sender.send(req)
-            self.auth_key = sender.auth_key
-        return sender
+
+        return client, sender
 
     async def _create_download_sender(
         self,
@@ -378,9 +388,10 @@ class ParallelTransferrer:
         base_offset: int = 0,
     ) -> DownloadSender:
         """Create a DownloadSender for a specific chunk offset."""
+        client, sender = await self._create_sender()
         return DownloadSender(
-            client=self.client,
-            sender=await self._create_sender(),
+            client=client,
+            sender=sender,
             request=GetFileRequest(
                 file, offset=base_offset + index * part_size, limit=part_size
             ),
@@ -523,11 +534,11 @@ class ParallelTransferrer:
 
 class _SingleSenderPool:
     """
-    Pool of persistent ``MTProtoSender`` connections per DC.
+    Pool of persistent ``MTProtoSender`` connections per DC and Session.
 
     Instead of creating a new connection for every HLS segment request
     (which involves handshake + auth export overhead), this pool maintains
-    a queue of idle senders per DC. When a caller needs a sender, it
+    a queue of idle senders per (session_key, DC). When a caller needs a sender, it
     borrows one from the pool (or creates a new one if the pool is empty).
     After use, the sender is returned to the pool for reuse.
 
@@ -538,11 +549,17 @@ class _SingleSenderPool:
     _MAX_IDLE_SECONDS = 120.0  # discard senders idle longer than this
 
     def __init__(self) -> None:
-        # dc_id -> list of (sender, auth_key, last_used_monotonic)
-        self._pool: dict[int, list[tuple[MTProtoSender, AuthKey, float]]] = {}
+        # (session_auth_key_id, dc_id) -> list of (sender, auth_key, last_used_monotonic)
+        self._pool: dict[
+            tuple[int, int], list[tuple[MTProtoSender, AuthKey, float]]
+        ] = {}
         self._lock = asyncio.Lock()
-        # Cached auth keys per DC -- shared across all senders.
-        self._auth_keys: dict[int, AuthKey] = {}
+        # Cached auth keys per (session_auth_key_id, DC)
+        self._auth_keys: dict[tuple[int, int], AuthKey] = {}
+
+    def _get_session_key(self, client: TelegramClient) -> int:
+        """Returns a unique identifier for the current client session."""
+        return id(client.session.auth_key)
 
     async def acquire(
         self,
@@ -557,8 +574,11 @@ class _SingleSenderPool:
         """
         import time as _time
 
+        session_key = self._get_session_key(client)
+        pool_key = (session_key, dc_id)
+
         async with self._lock:
-            bucket = self._pool.get(dc_id, [])
+            bucket = self._pool.get(pool_key, [])
             now = _time.monotonic()
             # Try to find a live sender
             while bucket:
@@ -567,7 +587,8 @@ class _SingleSenderPool:
                 if idle > self._MAX_IDLE_SECONDS:
                     # Stale -- disconnect quietly
                     logger.debug(
-                        "[sender_pool] Discarding stale sender for DC %d (idle %.0fs)",
+                        "[sender_pool] Discarding stale sender for Session %s DC %d (idle %.0fs)",
+                        session_key,
                         dc_id,
                         idle,
                     )
@@ -579,14 +600,17 @@ class _SingleSenderPool:
                 # Check if still connected
                 if sender.is_connected():
                     logger.debug(
-                        "[sender_pool] Reusing sender for DC %d (idle %.1fs)",
+                        "[sender_pool] Reusing sender for Session %s DC %d (idle %.1fs)",
+                        session_key,
                         dc_id,
                         idle,
                     )
                     return sender, auth_key
                 else:
                     logger.debug(
-                        "[sender_pool] Sender for DC %d disconnected, discarding", dc_id
+                        "[sender_pool] Sender for Session %s DC %d disconnected, discarding",
+                        session_key,
+                        dc_id,
                     )
                     try:
                         await sender.disconnect()
@@ -595,15 +619,12 @@ class _SingleSenderPool:
 
         # No reusable sender -- create a new one
         logger.debug("[sender_pool] Creating new sender for DC %d", dc_id)
-        return await self._create_sender(client, dc_id)
 
-    async def _create_sender(
-        self,
-        client: TelegramClient,
-        dc_id: int,
-    ) -> tuple[MTProtoSender, AuthKey]:
-        """Create a new ``MTProtoSender`` with auth export if needed."""
-        auth_key = self._auth_keys.get(dc_id)
+        # NOTE: Called outside of lock to avoid blocking other clients
+        # _create_sender manages its own local auth_keys caching safely.
+
+        # We need to recreate the create_sender logic inline because it needs await
+        auth_key = self._auth_keys.get(pool_key)
         if auth_key is None and dc_id == client.session.dc_id:
             auth_key = client.session.auth_key
 
@@ -627,11 +648,12 @@ class _SingleSenderPool:
             req = InvokeWithLayerRequest(LAYER, client._init_request)
             await sender.send(req)
             auth_key = sender.auth_key
-            self._auth_keys[dc_id] = auth_key
+            self._auth_keys[pool_key] = auth_key
         return sender, auth_key
 
     async def release(
         self,
+        client: TelegramClient,
         dc_id: int,
         sender: MTProtoSender,
         auth_key: AuthKey,
@@ -639,13 +661,17 @@ class _SingleSenderPool:
         """Return a sender to the pool for reuse."""
         import time as _time
 
+        session_key = self._get_session_key(client)
+        pool_key = (session_key, dc_id)
+
         # Cache auth key
         if auth_key is not None:
-            self._auth_keys[dc_id] = auth_key
+            self._auth_keys[pool_key] = auth_key
 
         if not sender.is_connected():
             logger.debug(
-                "[sender_pool] Sender for DC %d disconnected, not returning to pool",
+                "[sender_pool] Sender for Session %s DC %d disconnected, not returning to pool",
+                session_key,
                 dc_id,
             )
             try:
@@ -655,10 +681,11 @@ class _SingleSenderPool:
             return
 
         async with self._lock:
-            bucket = self._pool.setdefault(dc_id, [])
+            bucket = self._pool.setdefault(pool_key, [])
             bucket.append((sender, auth_key, _time.monotonic()))
             logger.debug(
-                "[sender_pool] Returned sender to pool for DC %d (pool size=%d)",
+                "[sender_pool] Returned sender to pool for Session %s DC %d (pool size=%d)",
+                session_key,
                 dc_id,
                 len(bucket),
             )
@@ -673,7 +700,7 @@ class _SingleSenderPool:
     async def close_all(self) -> None:
         """Disconnect all pooled senders."""
         async with self._lock:
-            for dc_id, bucket in self._pool.items():
+            for pool_key, bucket in self._pool.items():
                 for sender, _, _ in bucket:
                     try:
                         await sender.disconnect()
@@ -684,79 +711,136 @@ class _SingleSenderPool:
             self._auth_keys.clear()
 
 
-class TelegramSessionManager:
+class MultiSessionManager:
     """
-    Manages the Telethon client session.
+    Manages multiple Telethon client sessions for load balancing.
 
     Features:
-    - Lazy initialization on first request
+    - Lazy and eager initialization
     - Session persistence via StringSession
+    - Round-robin load balancing across multiple accounts
     - Automatic reconnection on disconnect
     - Thread-safe with asyncio lock
     - Persistent sender pool for HLS segment downloads
     """
 
-    # Cache TTL for get_media_info results (seconds)
     _MEDIA_INFO_CACHE_TTL = 3600  # 1 hour
 
     def __init__(self):
-        self._client: Optional[TelegramClient] = None
+        self._clients: list[TelegramClient] = []
         self._lock = asyncio.Lock()
         self._initialized = False
+        self._round_robin_index = 0
         # In-memory cache: key → (MediaInfo, expiry_timestamp)
         self._media_info_cache: dict[str, tuple["MediaInfo", float]] = {}
         # Persistent sender pool for single-connection downloads (HLS).
         self._sender_pool = _SingleSenderPool()
 
+    async def initialize_all(self):
+        """Initialize all configured sessions."""
+        async with self._lock:
+            if self._initialized:
+                return
+
+            if not API_ID or not API_HASH:
+                raise ValueError(
+                    "Telegram API credentials not configured (API_ID, API_HASH)"
+                )
+
+            from jackgram.bot.bot import SESSION_STRINGS
+
+            if not SESSION_STRINGS:
+                logger.warning(
+                    "No SESSION_STRINGS configured. User client features will be disabled."
+                )
+                self._initialized = True
+                return
+
+            logger.info(f"Initializing {len(SESSION_STRINGS)} Telegram clients...")
+
+            for i, session_str in enumerate(SESSION_STRINGS):
+                try:
+                    client = TelegramClient(
+                        StringSession(session_str),
+                        API_ID,
+                        API_HASH,
+                        request_retries=3,
+                        connection_retries=3,
+                        retry_delay=1,
+                        timeout=10.0,
+                    )
+                    await client.connect()
+
+                    if not await client.is_user_authorized():
+                        logger.error(
+                            f"Telegram session {i} is not authorized. Skipping."
+                        )
+                        continue
+
+                    self._clients.append(client)
+                except Exception as e:
+                    logger.error(f"Failed to initialize session {i}: {e}")
+
+            if not self._clients:
+                raise RuntimeError(
+                    "Failed to authorize any of the provided Telegram sessions."
+                )
+
+            self._initialized = True
+            logger.info(
+                f"Successfully initialized {len(self._clients)} Telegram clients."
+            )
+
     async def get_client(self) -> TelegramClient:
         """
-        Get the Telethon client, initializing if needed.
+        Get a Telethon client using round-robin load balancing.
 
         Returns:
             Connected TelegramClient instance
 
         Raises:
-            ValueError: If Telegram variables are not configured
-            RuntimeError: If connection fails
+            RuntimeError: If no clients are available
         """
+        if not self._initialized:
+            await self.initialize_all()
+
         async with self._lock:
-            if self._client is not None and self._client.is_connected():
-                return self._client
+            if not self._clients:
+                raise RuntimeError("No Telegram clients are available/authorized.")
 
-            # Validate settings
-            if not API_ID or not API_HASH:
-                raise ValueError(
-                    "Telegram API credentials not configured (telegram_api_id, telegram_api_hash)"
+            # Find next connected client
+            checked = 0
+            while checked < len(self._clients):
+                client = self._clients[self._round_robin_index]
+                self._round_robin_index = (self._round_robin_index + 1) % len(
+                    self._clients
                 )
 
-            if not SESSION_STRING:
-                raise ValueError(
-                    "Telegram session string not configured. Generate one using the web UI at /url-generator#telegram"
-                )
+                if client.is_connected():
+                    return client
+                else:
+                    try:
+                        await client.connect()
+                        if client.is_connected():
+                            return client
+                    except Exception as e:
+                        logger.warning(f"Client connection failed: {e}")
 
-            logger.info("Initializing Telegram client...")
+                checked += 1
 
-            # Create client with StringSession (extract raw values from SecretStr)
-            self._client = TelegramClient(
-                StringSession(SESSION_STRING),
-                API_ID,
-                API_HASH,
-                request_retries=3,
-                connection_retries=3,
-                retry_delay=1,
-                timeout=10.0,
+            raise RuntimeError(
+                "All Telegram clients disconnected and could not reconnect."
             )
 
-            await self._client.connect()
-
-            if not await self._client.is_user_authorized():
-                raise RuntimeError(
-                    "Telegram session is not authorized. Please regenerate the session string with valid credentials."
-                )
-
-            self._initialized = True
-            logger.info("Telegram client initialized successfully")
-            return self._client
+    async def close_all(self):
+        """Disconnect all clients."""
+        async with self._lock:
+            for client in self._clients:
+                if client.is_connected():
+                    await client.disconnect()
+            self._clients.clear()
+            self._initialized = False
+            await self._sender_pool.close_all()
 
     async def get_message(self, ref: TelegramMediaRef) -> Message:
         """
@@ -855,65 +939,92 @@ class TelegramSessionManager:
         return ""
 
     async def get_media_info(
-        self, ref: TelegramMediaRef, file_size: Optional[int] = None
+        self, ref: TelegramMediaRef, use_cache: bool = True
     ) -> MediaInfo:
         """
-        Get information about a media file.
-
-        Results are cached in-memory (with TTL) to avoid repeated Telegram API
-        calls for the same media -- especially important for HLS, where each
-        sub-request (playlist, init, segments) resolves the same source.
+        Get media information (size, type, attributes) for a Telegram reference.
 
         Args:
-            ref: TelegramMediaRef pointing to the media
-            file_size: Optional file size (required for file_id since it's not encoded in the ID)
+            ref: TelegramMediaRef to look up
+            use_cache: Whether to use the in-memory cache
 
         Returns:
-            MediaInfo with file details
-        """
-        # Check in-memory cache first
-        import time
+            MediaInfo object with file details
 
-        ck = self._media_info_cache_key(ref)
-        if ck:
-            cached = self._media_info_cache.get(ck)
-            if cached is not None:
-                info, expiry = cached
-                if time.monotonic() < expiry:
+        Raises:
+            ValueError: If reference is invalid or unsupported
+            RuntimeError: If media info cannot be extracted
+        """
+        # Create a cache key from the reference
+        cache_key = ""
+        if ref.file_id:
+            cache_key = f"file_id:{ref.file_id}"
+        elif ref.chat_id and ref.message_id:
+            cache_key = f"msg:{ref.chat_id}:{ref.message_id}"
+        else:
+            raise ValueError("Invalid TelegramMediaRef")
+
+        if use_cache:
+            import time
+
+            now = time.time()
+            if cache_key in self._media_info_cache:
+                info, expiry = self._media_info_cache[cache_key]
+                if now < expiry:
                     return info
                 else:
-                    del self._media_info_cache[ck]
+                    del self._media_info_cache[cache_key]
 
-        info = await self._get_media_info_uncached(ref, file_size)
+        # Resolution depends on whether we have a file_id or a chat_id+message_id
+        media = None
+        dc_id = None
+        file_name = None
+        duration = None
+        width = None
+        height = None
 
-        # Store in cache
-        if ck:
-            self._media_info_cache[ck] = (
-                info,
-                time.monotonic() + self._MEDIA_INFO_CACHE_TTL,
-            )
-
-        return info
-
-    async def _get_media_info_uncached(
-        self,
-        ref: TelegramMediaRef,
-        file_size: Optional[int] = None,
-    ) -> MediaInfo:
-        """Uncached implementation of get_media_info."""
-        # Handle file_id reference
-        if ref.file_id and not ref.message_id:
+        if ref.file_id:
+            # Resolve file_id directly
             media, dc_id = self.resolve_file_id(ref.file_id)
 
+            # Try to extract extra attributes if available
+            # Note: For file_id, we often don't have full attributes unless
+            # we fetch the original message, but we do our best.
             if isinstance(media, Document):
+                for attr in getattr(media, "attributes", []):
+                    if isinstance(attr, DocumentAttributeFilename):
+                        file_name = attr.file_name
+                    elif isinstance(attr, DocumentAttributeVideo):
+                        duration = attr.duration
+                        width = attr.w
+                        height = attr.h
+            elif isinstance(media, Photo):
+                # For basic file_id photos, we don't have dimensions easily
+                pass
+
+        elif ref.chat_id and ref.message_id:
+            # Fetch message to get media
+            messages = await self.get_message(ref)
+            message = messages[0] if isinstance(messages, list) else messages
+
+            if not message.media:
+                raise ValueError(
+                    f"Message {ref.message_id} in {ref.chat_id} does not contain media"
+                )
+
+            # Extract media object and attributes
+            if isinstance(message.media, MessageMediaDocument):
+                doc = message.media.document
+                if not isinstance(doc, Document):
+                    raise ValueError("Invalid document in message")
+
                 # Extract attributes
                 file_name = None
                 duration = None
                 width = None
                 height = None
-                mime_type = media.mime_type or "application/octet-stream"
 
-                for attr in media.attributes:
+                for attr in doc.attributes:
                     attr_dict = attr.to_dict()
                     if "file_name" in attr_dict:
                         file_name = attr_dict["file_name"]
@@ -924,120 +1035,39 @@ class TelegramSessionManager:
                     if "h" in attr_dict:
                         height = attr_dict["h"]
 
-                # Determine mime_type from attributes if empty
-                if mime_type == "application/octet-stream" or not mime_type:
-                    # Infer from document type
-                    for attr in media.attributes:
-                        if hasattr(attr, "voice") and attr.voice:
-                            mime_type = "audio/ogg"
-                            break
-                        elif hasattr(attr, "round_message") and attr.round_message:
-                            mime_type = "video/mp4"
-                            break
-                        elif attr.__class__.__name__ == "DocumentAttributeVideo":
-                            mime_type = "video/mp4"
-                            break
-                        elif attr.__class__.__name__ == "DocumentAttributeAudio":
-                            mime_type = "audio/mpeg"
-                            break
-                        elif attr.__class__.__name__ == "DocumentAttributeSticker":
-                            mime_type = "image/webp"
-                            break
-                        elif attr.__class__.__name__ == "DocumentAttributeAnimated":
-                            mime_type = "application/x-tgsticker"
-                            break
-
                 return MediaInfo(
-                    file_id=ref.file_id,
-                    file_size=file_size
-                    or media.size,  # Use provided size or 0 from resolved
-                    mime_type=mime_type,
+                    file_id=str(doc.id),
+                    file_size=doc.size,
+                    mime_type=doc.mime_type or "application/octet-stream",
                     file_name=file_name,
                     duration=duration,
                     width=width,
                     height=height,
-                    dc_id=dc_id,
+                    dc_id=doc.dc_id,
                 )
 
-            elif isinstance(media, Photo):
+            elif isinstance(message.media, MessageMediaPhoto):
+                photo = message.media.photo
+                if not photo:
+                    raise ValueError("Invalid photo in message")
+
                 # Get largest photo size
                 largest = max(
-                    media.sizes,
+                    photo.sizes,
                     key=lambda s: getattr(s, "size", 0) if hasattr(s, "size") else 0,
                 )
 
                 return MediaInfo(
-                    file_id=ref.file_id,
-                    file_size=file_size or getattr(largest, "size", 0),
+                    file_id=str(photo.id),
+                    file_size=getattr(largest, "size", 0),
                     mime_type="image/jpeg",
                     width=getattr(largest, "w", None),
                     height=getattr(largest, "h", None),
-                    dc_id=dc_id,
+                    dc_id=photo.dc_id,
                 )
 
-            raise ValueError(f"Unsupported media type from file_id: {type(media)}")
-
-        # Handle message-based reference
-        message = await self.get_message(ref)
-
-        if not message.media:
-            raise ValueError(f"Message {ref.message_id} does not contain media")
-
-        if isinstance(message.media, MessageMediaDocument):
-            doc = message.media.document
-            if not isinstance(doc, Document):
-                raise ValueError("Invalid document in message")
-
-            # Extract attributes
-            file_name = None
-            duration = None
-            width = None
-            height = None
-
-            for attr in doc.attributes:
-                attr_dict = attr.to_dict()
-                if "file_name" in attr_dict:
-                    file_name = attr_dict["file_name"]
-                if "duration" in attr_dict:
-                    duration = attr_dict["duration"]
-                if "w" in attr_dict:
-                    width = attr_dict["w"]
-                if "h" in attr_dict:
-                    height = attr_dict["h"]
-
-            return MediaInfo(
-                file_id=str(doc.id),
-                file_size=doc.size,
-                mime_type=doc.mime_type or "application/octet-stream",
-                file_name=file_name,
-                duration=duration,
-                width=width,
-                height=height,
-                dc_id=doc.dc_id,
-            )
-
-        elif isinstance(message.media, MessageMediaPhoto):
-            photo = message.media.photo
-            if not photo:
-                raise ValueError("Invalid photo in message")
-
-            # Get largest photo size
-            largest = max(
-                photo.sizes,
-                key=lambda s: getattr(s, "size", 0) if hasattr(s, "size") else 0,
-            )
-
-            return MediaInfo(
-                file_id=str(photo.id),
-                file_size=getattr(largest, "size", 0),
-                mime_type="image/jpeg",
-                width=getattr(largest, "w", None),
-                height=getattr(largest, "h", None),
-                dc_id=photo.dc_id,
-            )
-
-        else:
-            raise ValueError(f"Unsupported media type: {type(message.media)}")
+            else:
+                raise ValueError(f"Unsupported media type: {type(message.media)}")
 
     async def validate_file_access(
         self,
@@ -1087,7 +1117,7 @@ class TelegramSessionManager:
 
             # Make a small test request to validate access
             # Use ParallelTransferrer which handles DC migration properly
-            transferrer = ParallelTransferrer(client, dc_id)
+            transferrer = ParallelTransferrer(self, dc_id)
             try:
                 # Just request a tiny amount to validate - the download method handles DC connections
                 download_gen = transferrer.download(
@@ -1232,7 +1262,7 @@ class TelegramSessionManager:
             ref, file_size
         )
 
-        transferrer = ParallelTransferrer(client, dc_id)
+        transferrer = ParallelTransferrer(self, dc_id)
         try:
             async for chunk in transferrer.download(
                 file_location,
@@ -1335,29 +1365,17 @@ class TelegramSessionManager:
                 yield data
         finally:
             if sender_ok:
-                await self._sender_pool.release(dc_id, sender, auth_key)
+                await self._sender_pool.release(client, dc_id, sender, auth_key)
             else:
                 await self._sender_pool.discard(sender)
 
-    async def close(self) -> None:
-        """Close the Telegram client connection and pooled senders."""
-        await self._sender_pool.close_all()
-        async with self._lock:
-            if self._client is not None:
-                await self._client.disconnect()
-                self._client = None
-                self._initialized = False
-                logger.info("Telegram client disconnected")
-
     @property
     def is_initialized(self) -> bool:
-        """Check if the client is initialized and connected."""
-        return (
-            self._initialized
-            and self._client is not None
-            and self._client.is_connected()
+        """Check if any client is initialized and connected."""
+        return self._initialized and any(
+            client.is_connected() for client in self._clients
         )
 
 
 # Global session manager instance
-telegram_manager = TelegramSessionManager()
+multi_session_manager = MultiSessionManager()
