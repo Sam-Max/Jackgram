@@ -44,10 +44,14 @@ async def start_services():
     import jackgram.bot.plugins.stream
     import jackgram.bot.plugins.wizard
     from jackgram.utils.telegram_stream import multi_session_manager
+    from jackgram.bot.utils import process_index_queue
 
     logging.info("Initializing Bot Client...")
 
     await StreamBot.start(bot_token=BOT_TOKEN)
+
+    logging.info("Starting Async Indexing Queue Worker...")
+    asyncio.create_task(process_index_queue())
 
     logging.info(f"Initializing User Clients...")
     await multi_session_manager.initialize_all()

@@ -33,6 +33,18 @@ async def wizard_start(event: Message):
     chat_id = event.chat_id
     sender_id = event.sender_id
 
+    # Fast-fail for multipart/split files
+    filename = getattr(event.file, "name", "") or getattr(event.message, "message", "")
+    if filename:
+        multipart_pattern = re.compile(
+            r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE
+        )
+        if multipart_pattern.search(filename):
+            await event.reply(
+                "❌ **Upload Rejected**\n\nThis appears to be a split/multipart file (e.g., Part 1, CD 2). These are not supported because they cannot be streamed natively."
+            )
+            return
+
     # Auto-detect IMDb ID from caption
     caption_text = event.text or ""
     imdb_match = re.search(r"tt\d{7,8}", caption_text)

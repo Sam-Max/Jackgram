@@ -14,6 +14,9 @@ from jackgram.utils.utils import (
 )
 
 
+from jackgram.bot.utils import index_queue
+
+
 @StreamBot.on(events.NewMessage(func=lambda e: e.is_channel and e.media))
 async def private_receive_handler(event):
     message = event.message
@@ -21,26 +24,8 @@ async def private_receive_handler(event):
         if not message.media:
             return
 
-        title = get_file_title(message)
-        filename = format_filename(title)
-        file_info = await extract_file_info(message, filename)
-
-        data = PTN.parse(filename)
-        media_details_result = await get_media_details(data)
-
-        media_id = media_details_result["media_id"]
-        media_details = media_details_result["media_details"]
-        episode_details = media_details_result["episode_details"]
-
-        if media_id:
-            if "season" in data and "episode" in data:
-                await process_series(
-                    media_id, data, media_details, episode_details, file_info
-                )
-            else:
-                await process_movie(media_id, media_details, file_info)
-        else:
-            await process_files(file_info)
+        # Put the raw message into the async queue for background processing
+        await index_queue.put(message)
 
     except FloodWaitError as e:
         print(f"Sleeping for {e.seconds}s")

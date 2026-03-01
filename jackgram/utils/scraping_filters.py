@@ -93,7 +93,16 @@ class ScrapingFilters:
             if keyword in name_lower:
                 return True, f"Adult keyword detected: '{keyword}'"
 
-        # 3. Extension check
+        # 3. Multipart / Split file check (e.g., part1.rar, cd2.mkv)
+        import re
+
+        multipart_pattern = re.compile(
+            r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE
+        )
+        if multipart_pattern.search(filename):
+            return True, f"Multipart/Split file detected: '{filename}'"
+
+        # 4. Extension check
         ext = get_file_extension(filename)
         if ext and ext not in self.allowed_extensions:
             return True, f"Disallowed extension: '{ext}'"

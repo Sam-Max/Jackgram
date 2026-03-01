@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import PTN
+import traceback
+import PTN
 from typing import Dict, Optional
 from telethon import TelegramClient
 from telethon.tl.types import Message
@@ -35,6 +37,67 @@ scraping_filters = ScrapingFilters(
     allowed_extensions=_allowed_ext,
 )
 
+# ── Async Queue System ──────────────────────────────────────────────────────
+index_queue = asyncio.Queue()
+
+
+async def process_index_queue():
+    """Background worker to process individual files added to the queue."""
+    logging.info("Async Indexing Queue worker started.")
+    while True:
+        try:
+            message = await index_queue.get()
+
+            title: str = get_file_title(message)
+            filename: str = format_filename(title)
+
+            file_name = getattr(message.file, "name", "") or ""
+            file_size = getattr(message.file, "size", 0) or 0
+
+            skip, reason = scraping_filters.should_skip(
+                filename=file_name, file_size=file_size
+            )
+
+            if skip:
+                logging.info(f"Queue File Skipped: {reason} (file: {file_name})")
+            else:
+                logging.info(f"Queue processing: {file_name}")
+                file_info = await extract_file_info(message, filename)
+
+                data: dict = PTN.parse(filename)
+                media_details_result = await get_media_details(data)
+
+                media_id: Optional[str] = media_details_result.get("media_id")
+                media_details: Optional[dict] = media_details_result.get(
+                    "media_details"
+                )
+                episode_details: Optional[dict] = media_details_result.get(
+                    "episode_details"
+                )
+
+                if media_id:
+                    if "season" in data and "episode" in data:
+                        await process_series(
+                            media_id,
+                            data,
+                            media_details,
+                            episode_details,
+                            file_info,
+                        )
+                    else:
+                        await process_movie(media_id, media_details, file_info)
+                else:
+                    await process_files(file_info)
+
+                logging.info(f"Queue successfully indexed: {file_name}")
+
+        except Exception as e:
+            logging.error(
+                f"Error in process_index_queue: {e}\n{traceback.format_exc()}"
+            )
+        finally:
+            index_queue.task_done()
+
 
 async def fetch_message(
     client: TelegramClient, chat_id: int, message_id: int
@@ -49,9 +112,7 @@ async def fetch_message(
             return None
 
         logging.debug(f"Fetched message: {message.id}")
-        if message.document or message.photo or getattr(message, "video", None):
-            return await send_message(client, message, LOGS_CHANNEL)
-        return None
+        return message
     except FloodWaitError as e:
         logging.warning(f"Rate limit hit. Waiting for {e.seconds} seconds.")
         await asyncio.sleep(e.seconds)
@@ -100,20 +161,24 @@ async def index_channel(
         )
         for message_id in batch_message_ids:
             try:
-                message: Optional[Message] = await fetch_message(
+                orig_message: Optional[Message] = await fetch_message(
                     client, chat_id, message_id
                 )
-                if not message or not message.media:
+
+                # Only process documents and videos
+                if not orig_message or not (
+                    orig_message.document or getattr(orig_message, "video", None)
+                ):
                     stats["skipped_no_media"] += 1
                     await asyncio.sleep(1)
                     continue
 
-                title: str = get_file_title(message)
+                title: str = get_file_title(orig_message)
                 filename: str = format_filename(title)
 
                 # ── Apply scraping filters ──────────────────────────
-                file_name = getattr(message.file, "name", "") or ""
-                file_size = getattr(message.file, "size", 0) or 0
+                file_name = getattr(orig_message.file, "name", "") or ""
+                file_size = getattr(orig_message.file, "size", 0) or 0
 
                 skip, reason = scraping_filters.should_skip(
                     filename=file_name, file_size=file_size
@@ -130,9 +195,16 @@ async def index_channel(
                         stats["skipped_keyword"] += 1
                     elif "extension" in (reason or "").lower():
                         stats["skipped_ext"] += 1
+                    elif "Multipart" in (reason or ""):
+                        stats[
+                            "skipped_ext"
+                        ] += 1  # Group multipart skip as extension/format skip
                     await asyncio.sleep(1)
                     continue
                 # ────────────────────────────────────────────────────
+
+                # Forward message to LOGS_CHANNEL only if it passed all filters!
+                message = await send_message(client, orig_message, LOGS_CHANNEL)
 
                 file_info = await extract_file_info(message, filename)
 
