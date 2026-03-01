@@ -33,11 +33,22 @@ async def wizard_start(event: Message):
     chat_id = event.chat_id
     sender_id = event.sender_id
 
+    # Auto-detect IMDb ID from caption
+    caption_text = event.text or ""
+    imdb_match = re.search(r"tt\d{7,8}", caption_text)
+    detected_imdb_id = imdb_match.group(0) if imdb_match else None
+
     async with StreamBot.conversation(chat_id, timeout=120) as conv:
         try:
             # Step 1: Ask for media type
+            prompt_text = "🧙‍♂️ **User Contribution Wizard**\n\nI detected a media file."
+            if detected_imdb_id:
+                prompt_text += f"\n\n🔍 **Auto-detected IMDb ID:** `{detected_imdb_id}`\nIs this a Movie or a TV Show?"
+            else:
+                prompt_text += " Is this a Movie or a TV Show?"
+
             prompt_msg = await conv.send_message(
-                "🧙‍♂️ **User Contribution Wizard**\n\nI detected a media file. Is this a Movie or a TV Show?",
+                prompt_text,
                 buttons=[
                     [
                         Button.inline("🎬 Movie", b"movie"),
@@ -60,21 +71,31 @@ async def wizard_start(event: Message):
             type_str = "Movie" if media_type == "movie" else "TV Show"
             await res.edit(f"✅ Selected: **{type_str}**")
 
-            # Step 2: Ask for TMDb ID or title
-            await conv.send_message(
-                f"Please send the **TMDb ID** or the **exact title** of the {type_str}."
-            )
-            reply = await conv.get_response()
-            query = reply.text.strip()
-
-            # Search TMDb
+            # Step 2: Source TMDb ID (Auto or Manual)
             tmdb_id = None
-            if query.isdigit():
-                tmdb_id = int(query)
-            else:
-                wait_msg = await conv.send_message("🔍 Searching TMDb...")
-                tmdb_id = await asyncio.to_thread(tmdb.find_media_id, query, media_type)
+            if detected_imdb_id:
+                wait_msg = await conv.send_message(
+                    f"🔍 Fetching TMDb data for `{detected_imdb_id}`..."
+                )
+                tmdb_id = await asyncio.to_thread(
+                    tmdb.find_media_id, detected_imdb_id, media_type
+                )
                 await wait_msg.delete()
+            else:
+                await conv.send_message(
+                    f"Please send the **TMDb ID** or the **exact title** of the {type_str}."
+                )
+                reply = await conv.get_response()
+                query = reply.text.strip()
+
+                if query.isdigit():
+                    tmdb_id = int(query)
+                else:
+                    wait_msg = await conv.send_message("🔍 Searching TMDb...")
+                    tmdb_id = await asyncio.to_thread(
+                        tmdb.find_media_id, query, media_type
+                    )
+                    await wait_msg.delete()
 
             if not tmdb_id:
                 await conv.send_message(
