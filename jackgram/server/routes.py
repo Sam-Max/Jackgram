@@ -15,6 +15,20 @@ from jackgram.utils.telegram_stream import (
     TelegramMediaRef,
     ParallelTransferrer,
 )
+from telethon.errors import (
+    FloodWaitError,
+    ChannelPrivateError,
+    ChatAdminRequiredError,
+    UserNotParticipantError,
+    FileReferenceExpiredError,
+    MessageIdInvalidError,
+    PeerIdInvalidError,
+)
+from jackgram.utils.http_utils import (
+    parse_range_header,
+    _content_disposition_inline,
+    get_content_type,
+)
 
 routes = APIRouter()
 
@@ -30,6 +44,7 @@ async def root_route_handler():
     }
 
 
+@routes.head("/dl")
 @routes.get("/dl")
 async def stream_handler(request: Request, hash: str = Query(...)):
     try:
@@ -40,6 +55,23 @@ async def stream_handler(request: Request, hash: str = Query(...)):
         raise HTTPException(status_code=404, detail=e.message)
     except (asyncio.CancelledError, BrokenPipeError, ConnectionResetError) as e:
         raise HTTPException(status_code=499, detail=str(e))
+    except FloodWaitError as e:
+        wait_seconds = getattr(e, "seconds", 60)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limited by Telegram. Please wait {wait_seconds} seconds.",
+            headers={"Retry-After": str(wait_seconds)},
+        )
+    except (ChannelPrivateError, ChatAdminRequiredError, UserNotParticipantError) as e:
+        raise HTTPException(
+            status_code=403, detail="Access denied to this chat/channel."
+        )
+    except FileReferenceExpiredError as e:
+        raise HTTPException(
+            status_code=410, detail="File reference expired or inaccessible."
+        )
+    except (MessageIdInvalidError, PeerIdInvalidError) as e:
+        raise HTTPException(status_code=404, detail="Message or chat not found.")
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -67,28 +99,21 @@ async def media_streamer(request: Request, secure_hash: str):
 
     file_size = int(media_dict.get("file_size", 0))
 
-    # Parse Range header
-    if range_header:
-        try:
-            from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
-            from_bytes = int(from_bytes)
-            until_bytes = (
-                min(int(until_bytes), file_size - 1) if until_bytes else file_size - 1
-            )
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Bad Request")
-    else:
-        from_bytes = 0
-        until_bytes = file_size - 1
+    mime_type = media_dict.get("mime_type")
+    file_name = media_dict.get("file_name") or f"{secrets.token_hex(2)}.unknown"
+    content_type = get_content_type(mime_type, file_name)
 
-    # Validate range
-    if (until_bytes >= file_size) or (from_bytes < 0) or (until_bytes < from_bytes):
-        return Response(
-            "416: Range not satisfiable",
-            status_code=416,
-            headers={"Content-Range": f"bytes */{file_size}"},
-        )
+    # Handle HEAD requests
+    if request.method == "HEAD":
+        headers = {
+            "Content-Type": content_type,
+            "Content-Length": str(file_size),
+            "Accept-Ranges": "bytes",
+            "Content-Disposition": _content_disposition_inline(file_name),
+        }
+        return Response(headers=headers)
 
+    from_bytes, until_bytes = parse_range_header(range_header, file_size)
     req_length = until_bytes - from_bytes + 1
 
     # Initialize MultiSessionManager to get client client and reference
@@ -109,16 +134,15 @@ async def media_streamer(request: Request, secure_hash: str):
         limit=req_length,
     )
 
-    mime_type = media_dict.get("mime_type", "application/octet-stream")
-    file_name = media_dict.get("file_name") or f"{secrets.token_hex(2)}.unknown"
-
     headers = {
-        "Content-Type": mime_type,
-        "Content-Range": f"bytes {from_bytes}-{until_bytes}/{file_size}",
+        "Content-Type": content_type,
         "Content-Length": str(req_length),
-        "Content-Disposition": f'attachment; filename="{file_name}"',
         "Accept-Ranges": "bytes",
+        "Content-Disposition": _content_disposition_inline(file_name),
     }
+
+    if range_header:
+        headers["Content-Range"] = f"bytes {from_bytes}-{until_bytes}/{file_size}"
 
     logging.info(f"File Size: {file_size}")
     logging.info(f"Content-Range: bytes {from_bytes}-{until_bytes}/{file_size}")
