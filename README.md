@@ -23,6 +23,10 @@ Jackgram allows you to index media files from public and private Telegram channe
 ## ✨ Features
 
 - 📂 **Channel Indexing**: Automatically index video files from public and private Telegram channels.
+- 🌐 **Web Admin Dashboard**: Manage indexed files, generate session strings, and view media in a responsive web UI with light/dark themes.
+- 🧠 **Interactive Contribution Wizard**: Crowdsource media indexing with an intuitive Telegram bot wizard.
+- 🚀 **Multi-Account Streaming**: Distribute MTProto streaming load across multiple Telegram accounts for enhanced speed and reliability.
+- 🏷️ **Smart Metadata Extraction**: Integrated PTT (Parse Torrent Title) for accurate extraction of resolution, codecs, and release groups from filenames.
 - ⚡ **FastAPI Powered**: High-performance REST API for lightning-fast data retrieval and streaming.
 - 🔐 **Secure Authentication**: Optional token-based authentication system to protect your API.
 - 📺 **Seamless Streaming**: Direct stream and download support with HTTP Range (Partial Content) support.
@@ -84,11 +88,14 @@ Fill your `config.env` with these essential variables. You can get Telegram API 
 | `LOGS_CHANNEL` | Channel ID where indexed data is stored | Required |
 | `BASE_URL` | Public IP/Domain of your server | Required |
 | `DATABASE_URL` | MongoDB connection string | `mongodb://admin:admin@mongo:27017` |
-| `SESSION_STRING` | Telethon session string (for private channels) | Optional |
+| `SESSION_STRINGS` | Telethon session string(s) for private channels/streaming (single, comma-separated, or JSON array) | Optional |
 | `USE_TOKEN_SYSTEM` | Enable/Disable API token system | `True` |
 | `SECRET_KEY` | Secret key for JWT encryption | `your-secret-token` |
 | `PORT` | Web server port | `5000` |
 | `WORKERS` | Number of concurrent workers | `10` |
+| `INDEX_MIN_SIZE_MB` | Minimum file size to index (in MB) | Optional |
+| `INDEX_ADULT_KEYWORDS` | Comma-separated list of keywords to ignore files | Optional |
+| `INDEX_ALLOWED_EXTENSIONS`| Comma-separated list of permitted extensions (e.g. `.mkv,.mp4`) | Optional |
 
 ---
 
@@ -112,6 +119,10 @@ The bot provides a set of admin commands to manage your index:
 ## 📡 API Endpoints
 
 All API requests require the `Authorization: Bearer <token>` header if `USE_TOKEN_SYSTEM` is enabled.
+
+### 🌐 Web & Admin
+- **Web Dashboard:** `GET /` (Redirects to `/web/index.html` for the interactive UI)
+- **Admin API:** `GET /api/admin/...` (Endpoints for indexing, generating sessions, stats, DB wiping, and metadata sync)
 
 ### 📽️ Media Streaming
 - **Series:** `GET /stream/series/{tmdb_id}:{season}:{episode}.json`
