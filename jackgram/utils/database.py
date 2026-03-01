@@ -16,7 +16,7 @@ class Database:
         await self.media_file_collection.insert_one(media_doc)
 
     async def del_media_file(self, hash: str) -> Any:
-        return await self.tmdb_collection.delete_one({"hash": hash})
+        return await self.media_file_collection.delete_one({"hash": hash})
 
     async def get_media_file(self, hash: str) -> Optional[Dict[str, Any]]:
         return await self.media_file_collection.find_one({"hash": hash})
@@ -75,6 +75,52 @@ class Database:
         return await self.tmdb_collection.count_documents(
             {"tmdb_id": {"$exists": True}}
         )
+
+    async def count_movies(self) -> int:
+        return await self.tmdb_collection.count_documents({"type": "movie"})
+
+    async def count_tv(self) -> int:
+        return await self.tmdb_collection.count_documents({"type": "tv"})
+
+    async def count_media_files(self) -> int:
+        return await self.media_file_collection.count_documents({})
+
+    async def get_total_storage(self) -> int:
+        """Returns total indexed file size in bytes across both collections."""
+        pipeline = [{"$group": {"_id": None, "total": {"$sum": "$file_size"}}}]
+        tmdb_pipeline = [
+            {"$unwind": {"path": "$file_info", "preserveNullAndEmptyArrays": True}},
+            {"$group": {"_id": None, "total": {"$sum": "$file_info.file_size"}}},
+        ]
+        raw_result = await self.media_file_collection.aggregate(pipeline).to_list(1)
+        tmdb_result = await self.tmdb_collection.aggregate(tmdb_pipeline).to_list(1)
+        raw_total = raw_result[0]["total"] if raw_result else 0
+        tmdb_total = tmdb_result[0]["total"] if tmdb_result else 0
+        return raw_total + tmdb_total
+
+    async def get_movies(
+        self, page: int, per_page: int = 20
+    ) -> List[Dict[str, Any]]:
+        skip = (page - 1) * per_page
+        cursor = (
+            self.tmdb_collection.find({"type": "movie"})
+            .sort("_id", -1)
+            .skip(skip)
+            .limit(per_page)
+        )
+        return await cursor.to_list(length=per_page)
+
+    async def get_tv(
+        self, page: int, per_page: int = 20
+    ) -> List[Dict[str, Any]]:
+        skip = (page - 1) * per_page
+        cursor = (
+            self.tmdb_collection.find({"type": "tv"})
+            .sort("_id", -1)
+            .skip(skip)
+            .limit(per_page)
+        )
+        return await cursor.to_list(length=per_page)
 
     async def get_tmdb_latest(
         self, page: int = 1, per_page: int = 12
