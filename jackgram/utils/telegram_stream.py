@@ -321,6 +321,8 @@ class ParallelTransferrer:
 
         self.dc_id = dc_id
         self.senders: Optional[list[DownloadSender]] = None
+        # Cache auth keys per DC to avoid repeated ExportAuthorizationRequest calls
+        self._dc_auth_keys: dict[int, "AuthKey"] = {}
 
     async def _cleanup(self) -> None:
         """Clean up all sender connections gracefully."""
@@ -353,7 +355,10 @@ class ParallelTransferrer:
         dc_id = self.dc_id or client.session.dc_id
         dc = await client._get_dc(dc_id)
 
-        auth_key = client.session.auth_key if dc_id == client.session.dc_id else None
+        # Use cached auth key first, then fall back to session key if same DC
+        auth_key = self._dc_auth_keys.get(dc_id)
+        if auth_key is None and dc_id == client.session.dc_id:
+            auth_key = client.session.auth_key
 
         sender = MTProtoSender(auth_key, loggers=client._log)
         await sender.connect(
@@ -370,11 +375,18 @@ class ParallelTransferrer:
                 f"[Parallel] Exporting auth to DC {dc_id} for session {id(client.session.auth_key)}"
             )
             auth = await client(ExportAuthorizationRequest(dc_id))
-            client._init_request.query = ImportAuthorizationRequest(
-                id=auth.id, bytes=auth.bytes
-            )
-            req = InvokeWithLayerRequest(LAYER, client._init_request)
-            await sender.send(req)
+            # Save and restore _init_request.query to avoid permanently mutating client state
+            original_query = client._init_request.query
+            try:
+                client._init_request.query = ImportAuthorizationRequest(
+                    id=auth.id, bytes=auth.bytes
+                )
+                req = InvokeWithLayerRequest(LAYER, client._init_request)
+                await sender.send(req)
+            finally:
+                client._init_request.query = original_query
+            # Cache the auth key so subsequent senders reuse it
+            self._dc_auth_keys[dc_id] = sender.auth_key
 
         return client, sender
 
@@ -642,11 +654,16 @@ class _SingleSenderPool:
         if not auth_key:
             logger.debug("[sender_pool] Exporting auth to DC %d", dc_id)
             auth = await client(ExportAuthorizationRequest(dc_id))
-            client._init_request.query = ImportAuthorizationRequest(
-                id=auth.id, bytes=auth.bytes
-            )
-            req = InvokeWithLayerRequest(LAYER, client._init_request)
-            await sender.send(req)
+            # Save and restore _init_request.query to avoid permanently mutating client state
+            original_query = client._init_request.query
+            try:
+                client._init_request.query = ImportAuthorizationRequest(
+                    id=auth.id, bytes=auth.bytes
+                )
+                req = InvokeWithLayerRequest(LAYER, client._init_request)
+                await sender.send(req)
+            finally:
+                client._init_request.query = original_query
             auth_key = sender.auth_key
             self._auth_keys[pool_key] = auth_key
         return sender, auth_key

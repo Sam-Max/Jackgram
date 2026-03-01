@@ -31,6 +31,32 @@ async def get_file_info_dict(
         if not media or media.get("hash") != secure_hash:
             return None
     else:
-        return None
+        # Fallback: search by hash alone across all collections
+        media = await _find_by_hash(secure_hash)
 
     return media
+
+
+async def _find_by_hash(secure_hash: str) -> Optional[Dict[str, Any]]:
+    """Search for a file by hash across raw files and tmdb entries."""
+    # 1. Check raw media files
+    raw = await db.get_media_file(secure_hash)
+    if raw and raw.get("hash") == secure_hash:
+        return raw
+
+    # 2. Search tmdb_collection (movies and TV) for matching file_info hash
+    # Movies: file_info[].hash
+    movie = await db.tmdb_collection.find_one(
+        {"type": "movie", "file_info.hash": secure_hash}
+    )
+    if movie:
+        return await extract_media_by_hash(movie, secure_hash)
+
+    # TV: seasons[].episodes[].file_info[].hash
+    tv = await db.tmdb_collection.find_one(
+        {"type": "tv", "seasons.episodes.file_info.hash": secure_hash}
+    )
+    if tv:
+        return await extract_media_by_hash(tv, secure_hash)
+
+    return None
