@@ -1,21 +1,22 @@
-from pyrogram import Client
-from pyrogram.errors import UserIsBot
+from telethon.sync import TelegramClient
+from telethon.sessions import StringSession
 import asyncio
 
-API_KEY = ""  # Replace with your actual API key
-API_HASH = ""  # Replace with your actual API hash
+# Replace with your actual API ID and API Hash
+API_ID = 0  # e.g., 12345
+API_HASH = ""  # e.g., "0123456789abcdef0123456789abcdef"
 
 
 async def generate_session_string():
-    async with Client(
-        name="Jackgram-User", api_id=API_KEY, api_hash=API_HASH, in_memory=True
-    ) as app:
-        session = await app.export_session_string()
-        try:
-            await app.send_message("me", f"#Jackgram\n\n<code>{session}</code>")
-        except UserIsBot:
-            pass
-        print(f"Done!!, String Session: {session}")
+    if not API_ID or not API_HASH:
+        print("Please set your API_ID and API_HASH in session_generator.py")
+        return
+
+    async with TelegramClient(StringSession(), API_ID, API_HASH) as client:
+        session = client.session.save()
+        print(f"\n✅ Your Telethon String Session:\n\n{session}\n")
+        print("Keep this string safe and do not share it with anyone!")
 
 
-asyncio.run(generate_session_string())
+if __name__ == "__main__":
+    asyncio.run(generate_session_string())

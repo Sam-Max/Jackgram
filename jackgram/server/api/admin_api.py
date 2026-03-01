@@ -4,7 +4,10 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
-from jackgram.bot.bot import get_db, TMDB_API, TMDB_LANGUAGE
+from telethon.sync import TelegramClient
+from telethon.sessions import StringSession
+from telethon.errors import SessionPasswordNeededError
+from jackgram.bot.bot import get_db, TMDB_API, TMDB_LANGUAGE, API_ID, API_HASH
 
 admin_routes = APIRouter(prefix="/admin")
 db = get_db()
@@ -229,3 +232,104 @@ async def get_poster(tmdb_id: int, type: str = Query("movie", pattern="^(movie|t
     except Exception as e:
         logging.warning(f"Failed to fetch poster for {type}/{tmdb_id}: {e}")
         return {"poster_url": None, "backdrop_url": None, "overview": ""}
+
+
+# ---------------------------------------------------------------------------
+# Session Generator
+# ---------------------------------------------------------------------------
+
+
+class SessionRequestCodePayload(BaseModel):
+    phone_number: str
+
+
+class SessionVerifyCodePayload(BaseModel):
+    phone_number: str
+    phone_code_hash: str
+    code: str
+    password: Optional[str] = None
+
+
+# Temporary in-memory storage for clients during the auth flow
+_session_clients: Dict[str, TelegramClient] = {}
+
+
+@admin_routes.post("/session/request_code")
+async def session_request_code(payload: SessionRequestCodePayload):
+    if not API_ID or not API_HASH:
+        raise HTTPException(
+            status_code=500, detail="API_ID and API_HASH must be configured."
+        )
+
+    phone = payload.phone_number.strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="Phone number is required.")
+
+    # Clean up any existing client for this phone
+    if phone in _session_clients:
+        try:
+            await _session_clients[phone].disconnect()
+        except:
+            pass
+        del _session_clients[phone]
+
+    client = TelegramClient(StringSession(), API_ID, API_HASH)
+    await client.connect()
+
+    try:
+        sent_code = await client.send_code_request(phone)
+        _session_clients[phone] = client
+        return {
+            "status": "ok",
+            "phone_code_hash": sent_code.phone_code_hash,
+            "is_password_required": False,  # We don't know yet until verification
+        }
+    except Exception as e:
+        await client.disconnect()
+        logging.error(f"Error requesting code for {phone}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@admin_routes.post("/session/verify_code")
+async def session_verify_code(payload: SessionVerifyCodePayload):
+    phone = payload.phone_number.strip()
+    client = _session_clients.get(phone)
+
+    if not client or not client.is_connected():
+        raise HTTPException(
+            status_code=400,
+            detail="Session expired or not found. Please request a new code.",
+        )
+
+    try:
+        try:
+            await client.sign_in(
+                phone=phone,
+                code=payload.code,
+                phone_code_hash=payload.phone_code_hash,
+            )
+        except SessionPasswordNeededError:
+            if not payload.password:
+                return JSONResponse(
+                    status_code=401,
+                    content={
+                        "password_required": True,
+                        "detail": "2FA password required",
+                    },
+                )
+            await client.sign_in(password=payload.password)
+
+        session_string = client.session.save()
+        return {"status": "ok", "session_string": session_string}
+
+    except Exception as e:
+        logging.error(f"Error verifying code for {phone}: {e}")
+        # Only raise error, don't disconnect immediately in case they need to type password
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        # If successfully authorized, or if a fatal error occurred (not just missing password),
+        # we cleanup. Note: This could be refined.
+        if await client.is_user_authorized():
+            await client.disconnect()
+            if phone in _session_clients:
+                del _session_clients[phone]

@@ -98,3 +98,4 @@ config.env
 bot.log
 movie.py
 tv.py
+jackgram_db/
