@@ -11,6 +11,7 @@ class Database:
         self.db = self.client[database_name]
         self.tmdb_collection = self.db.tmdb
         self.media_file_collection = self.db.media_file_collection
+        self.api_users = self.db.api_users
 
     async def add_media_file(self, media_doc: Dict[str, Any]) -> None:
         await self.media_file_collection.insert_one(media_doc)
@@ -124,7 +125,9 @@ class Database:
                 {"$skip": skip},
                 {"$limit": per_page},
             ]
-            return await self.tmdb_collection.aggregate(pipeline).to_list(length=per_page)
+            return await self.tmdb_collection.aggregate(pipeline).to_list(
+                length=per_page
+            )
 
         mongo_field = self._SORT_FIELD_MAP.get(sort_by, "_id")
         cursor = (
@@ -278,3 +281,17 @@ class Database:
 
     async def list_collections(self) -> List[str]:
         return await self.db.list_collection_names()
+
+    async def add_api_user(self, name: str, token: str) -> None:
+        await self.api_users.insert_one({"name": name, "token": token})
+
+    async def get_api_users(self) -> List[Dict[str, Any]]:
+        cursor = self.api_users.find({}, {"_id": 0})
+        return await cursor.to_list(length=100)
+
+    async def get_api_user(self, token: str) -> Optional[Dict[str, Any]]:
+        return await self.api_users.find_one({"token": token}, {"_id": 0})
+
+    async def delete_api_user(self, token: str) -> bool:
+        result = await self.api_users.delete_one({"token": token})
+        return result.deleted_count > 0

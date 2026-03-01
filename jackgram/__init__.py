@@ -12,18 +12,25 @@ import jwt
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/admin/login" or not request.url.path.startswith(
+            "/admin/"
+        ):
+            return await call_next(request)
+
         token = request.headers.get("Authorization")
         if not token:
-            return JSONResponse(status_code=401, content="Token is missing")
+            return JSONResponse(status_code=401, content={"detail": "Token is missing"})
 
         try:
             token = token.replace("Bearer ", "")
             decoded = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
             request.state.user = decoded  # Attach user info to the request
         except jwt.ExpiredSignatureError:
-            return JSONResponse(status_code=401, content="Token has expired")
+            return JSONResponse(
+                status_code=401, content={"detail": "Token has expired"}
+            )
         except jwt.InvalidTokenError:
-            return JSONResponse(status_code=401, content="Invalid token")
+            return JSONResponse(status_code=401, content={"detail": "Invalid token"})
 
         return await call_next(request)  # Continue processing the request
 
@@ -34,7 +41,7 @@ app.include_router(routes)
 app.include_router(stream_routes)
 app.include_router(search_routes)
 app.include_router(admin_routes)
-# app.add_middleware(AuthMiddleware)
+app.add_middleware(AuthMiddleware)
 
 # Serve admin web dashboard
 _web_dir = os.path.join(os.path.dirname(__file__), "web")

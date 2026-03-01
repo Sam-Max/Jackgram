@@ -4,10 +4,21 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
+import uuid
+import time
+import jwt
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 from telethon.errors import SessionPasswordNeededError
-from jackgram.bot.bot import get_db, TMDB_API, TMDB_LANGUAGE, API_ID, API_HASH
+from jackgram.bot.bot import (
+    get_db,
+    TMDB_API,
+    TMDB_LANGUAGE,
+    API_ID,
+    API_HASH,
+    AUTH_USERS,
+    SECRET_KEY,
+)
 
 admin_routes = APIRouter(prefix="/admin")
 db = get_db()
@@ -17,6 +28,49 @@ def _clean(doc: Dict[str, Any]) -> Dict[str, Any]:
     """Remove MongoDB ObjectId so the document is JSON-serialisable."""
     doc.pop("_id", None)
     return doc
+
+
+# ---------------------------------------------------------------------------
+# Auth / Login
+# ---------------------------------------------------------------------------
+
+
+class LoginPayload(BaseModel):
+    username: str
+    password: str
+
+
+@admin_routes.post("/login")
+async def admin_login(payload: LoginPayload):
+    if (
+        payload.username not in AUTH_USERS
+        or AUTH_USERS[payload.username] != payload.password
+    ):
+        return JSONResponse(status_code=401, content={"detail": "Invalid credentials"})
+
+    payload_data = {
+        "user": payload.username,
+        "exp": time.time() + (7 * 24 * 3600),  # Valid for 7 days
+    }
+    token = jwt.encode(payload_data, SECRET_KEY, algorithm="HS256")
+    response = JSONResponse(content={"status": "ok", "token": token})
+    # Set cookie for browser-based streaming (admin bypass)
+    response.set_cookie(
+        key="jg-token",
+        value=token,
+        httponly=True,
+        max_age=7 * 24 * 3600,
+        samesite="lax",
+        path="/",
+    )
+    return response
+
+
+@admin_routes.post("/logout")
+async def admin_logout():
+    response = JSONResponse(content={"status": "ok"})
+    response.delete_cookie(key="jg-token")
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +425,41 @@ async def get_system_stats():
         "active_streams": list(active_streams.values()),
         "cache_size": len(multi_session_manager._media_info_cache),
     }
+
+
+# ---------------------------------------------------------------------------
+# API Users Management
+# ---------------------------------------------------------------------------
+
+
+class APIUserCreatePayload(BaseModel):
+    name: str
+
+
+@admin_routes.get("/api-users")
+async def list_api_users():
+    users = await db.get_api_users()
+    return {"results": users}
+
+
+@admin_routes.post("/api-users")
+async def create_api_user(payload: APIUserCreatePayload):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+
+    # Generate a unique token
+    token = f"jack_{uuid.uuid4().hex}"
+    await db.add_api_user(name, token)
+    return {"status": "ok", "name": name, "token": token}
+
+
+@admin_routes.delete("/api-users/{token}")
+async def delete_api_user(token: str):
+    success = await db.delete_api_user(token)
+    if not success:
+        raise HTTPException(status_code=404, detail="Token not found")
+    return {"status": "ok", "deleted": True}
 
 
 @admin_routes.post("/system-stats/clear-cache")

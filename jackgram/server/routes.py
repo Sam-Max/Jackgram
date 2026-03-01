@@ -13,6 +13,9 @@ import uuid
 import time
 from typing import Dict, Any
 
+from jackgram.bot.bot import USE_TOKEN_SYSTEM
+from fastapi import Depends
+from jackgram.server.api.bot_api import verify_api_token
 from jackgram.utils.file_properties import get_file_info_dict
 from jackgram.utils.telegram_stream import (
     multi_session_manager,
@@ -53,7 +56,9 @@ async def root_route_handler():
 
 @routes.head("/dl")
 @routes.get("/dl")
-async def stream_handler(request: Request, hash: str = Query(...)):
+async def stream_handler(
+    request: Request, hash: str = Query(...), _=Depends(verify_api_token)
+):
     try:
         return await media_streamer(request, hash)
     except InvalidHash as e:
@@ -149,6 +154,10 @@ async def media_streamer(request: Request, secure_hash: str):
 
         try:
             async for chunk in generator:
+                # Check if the client has disconnected
+                if await request.is_disconnected():
+                    logging.info(f"Client disconnected, stopping stream {stream_id}")
+                    break
                 active_streams[stream_id]["bytes_sent"] += len(chunk)
                 now = time.time()
                 elapsed = now - last_time
@@ -160,11 +169,11 @@ async def media_streamer(request: Request, secure_hash: str):
                     last_time = now
                     last_bytes = active_streams[stream_id]["bytes_sent"]
                 yield chunk
-        except Exception as e:
-            logging.error(f"Stream interrupted: {e}")
-            raise
+        except (Exception, asyncio.CancelledError) as e:
+            logging.info(f"Stream {stream_id} ended: {type(e).__name__}")
         finally:
             active_streams.pop(stream_id, None)
+            logging.debug(f"Stream {stream_id} removed from active_streams")
 
     # Stream the file using ParallelTransferrer
     transferrer = ParallelTransferrer(multi_session_manager, dc_id=dc_id)

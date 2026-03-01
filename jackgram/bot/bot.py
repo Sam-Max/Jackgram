@@ -60,7 +60,11 @@ if _session_strings_env:
 DATABASE_URL = getenv("DATABASE_URL", "mongodb://admin:admin@mongo:27017")
 BACKUP_DIR = getenv("BACKUP_DIR", "/app/database")
 SLEEP_THRESHOLD = int(getenv("SLEEP_THRESHOLD", "60"))
-# AUTH_USERS = list(set(int(x) for x in str(getenv("AUTH_USERS", "")).split()))
+AUTH_USERS = getenv("AUTH_USERS", "{}")
+try:
+    AUTH_USERS = json.loads(AUTH_USERS)
+except json.JSONDecodeError:
+    AUTH_USERS = {"admin": "admin"}
 TMDB_LANGUAGE = getenv("TMDB_LANGUAGE", "en-US")
 WORKERS = int(getenv("WORKERS", "10"))
 

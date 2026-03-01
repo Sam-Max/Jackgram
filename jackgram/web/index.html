@@ -210,19 +210,21 @@
 <body>
 <div class="app">
   <aside class="sidebar">
-    <div class="sidebar-logo"><div class="logo-icon">📡</div><div class="logo-text">Jack<span>gram</span></div></div>
+    <div class="sidebar-logo" style="cursor:pointer" onclick="switchTab('dashboard')"><div class="logo-icon">📡</div><div class="logo-text">Jack<span>gram</span></div></div>
     <div class="sidebar-label">Navigation</div>
     <nav id="nav">
       <div class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')"><span class="nav-icon">📊</span><span>Dashboard</span></div>
       <div class="nav-item" data-tab="movies" onclick="switchTab('movies')"><span class="nav-icon">🎬</span><span>Movies</span><span class="nav-badge" id="nav-movies-count">–</span></div>
       <div class="nav-item" data-tab="tv" onclick="switchTab('tv')"><span class="nav-icon">📺</span><span>TV Shows</span><span class="nav-badge" id="nav-tv-count">–</span></div>
       <div class="nav-item" data-tab="files" onclick="switchTab('files')"><span class="nav-icon">📁</span><span>Raw Files</span><span class="nav-badge" id="nav-files-count">–</span></div>
+      <div class="nav-item" data-tab="users" onclick="switchTab('users')"><span class="nav-icon">👥</span><span>API Users</span></div>
       <div class="nav-item" data-tab="search" onclick="switchTab('search')"><span class="nav-icon">🔍</span><span>Search</span></div>
     </nav>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-bottom">
       <div class="theme-toggle" onclick="toggleTheme()"><span class="theme-toggle-icon" id="theme-icon">🌙</span><span id="theme-label">Dark Mode</span></div>
-      <div class="sidebar-version">v1.0.0 · Jackgram Admin</div>
+      <div class="theme-toggle" style="margin-top:4px" onclick="doLogout()"><span class="theme-toggle-icon">🚪</span><span>Log Out</span></div>
+      <div class="sidebar-version">v1.2.0 · Jackgram Admin</div>
     </div>
   </aside>
   <div class="main">
@@ -232,11 +234,13 @@
 </div>
 <div class="modal-backdrop" id="edit-modal"><div class="modal"><div class="modal-header"><div class="modal-title" id="modal-title">Edit</div><div class="modal-close" onclick="closeModal()">✕</div></div><div id="modal-body"></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEdit()">💾 Save</button></div></div></div>
 <div class="modal-backdrop" id="episodes-modal"><div class="modal"><div class="modal-header"><div class="modal-title" id="ep-modal-title">Episodes</div><div class="modal-close" onclick="closeEpisodesModal()">✕</div></div><div id="ep-modal-body" style="margin:-10px -28px -28px"></div></div></div>
+<div class="modal-backdrop" id="movie-modal"><div class="modal"><div class="modal-header"><div class="modal-title" id="mv-modal-title">Movie</div><div class="modal-close" onclick="closeMovieModal()">✕</div></div><div id="mv-modal-body" style="margin:-10px -28px -28px"></div></div></div>
 <div class="modal-backdrop" id="session-modal"><div class="modal"><div class="modal-header"><div class="modal-title">Generate Telegram Session</div><div class="modal-close" onclick="closeSessionModal()">✕</div></div><div id="session-body"><div id="session-step-1"><div class="form-field"><label class="form-label" for="sess-phone">Phone Number (with country code)</label><input class="form-input" id="sess-phone" type="text" placeholder="+1234567890" /></div><div class="modal-actions"><button class="btn btn-primary" id="btn-req-code" onclick="requestSessionCode()">Send Code</button></div></div><div id="session-step-2" style="display:none"><div class="form-field"><label class="form-label" for="sess-code">Telegram Code</label><input class="form-input" id="sess-code" type="text" placeholder="12345" /></div><div class="form-field" id="sess-pwd-box" style="display:none"><label class="form-label" for="sess-pwd">Two-Step Verification Password</label><input class="form-input" id="sess-pwd" type="password" placeholder="Password" /></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeSessionModal()">Cancel</button><button class="btn btn-primary" id="btn-verify-code" onclick="verifySessionCode()">Verify</button></div></div><div id="session-step-3" style="display:none"><div class="form-field"><label class="form-label">Your String Session</label><textarea class="form-input" id="sess-result" rows="8" readonly style="resize:none;font-family:monospace;font-size:11px"></textarea><div style="font-size:11px;color:var(--text-dim);margin-top:8px">⚠️ Keep this string safe and do not share it with anyone! Add it to your config.</div></div><div class="modal-actions"><button class="btn btn-primary" onclick="copySessionString(this)">🔗 Copy to Clipboard</button></div></div></div></div></div>
+<div class="modal-backdrop" id="login-modal"><div class="modal"><div class="modal-header"><div class="modal-title">Admin Login</div></div><div id="login-body"><div class="form-field"><label class="form-label">Username</label><input class="form-input" id="login-user" type="text" /></div><div class="form-field"><label class="form-label">Password</label><input class="form-input" id="login-pass" type="password" /></div><div class="modal-actions"><button class="btn btn-primary" id="btn-login" onclick="doLogin()">Log In</button></div></div></div></div>
 <div class="confirm-overlay" id="confirm-overlay"><div class="confirm-box"><div class="confirm-icon">🗑️</div><div class="confirm-title">Delete this entry?</div><div class="confirm-msg" id="confirm-msg">This action cannot be undone.</div><div class="confirm-actions"><button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button><button class="btn btn-danger" id="confirm-ok">Delete</button></div></div></div>
 <div class="toast-container" id="toasts"></div>
 <script>
-const state={tab:'dashboard',stats:null,movies:{data:[],page:1,total:0,sortBy:'date',sortOrder:'desc',viewMode:'grid'},tv:{data:[],page:1,total:0,sortBy:'date',sortOrder:'desc',viewMode:'grid'},files:{data:[],page:1,total:0},editing:null,pendingDelete:null};
+const state={tab:'dashboard',stats:null,movies:{data:[],page:1,total:0,sortBy:'date',sortOrder:'desc',viewMode:'grid'},tv:{data:[],page:1,total:0,sortBy:'date',sortOrder:'desc',viewMode:'grid'},files:{data:[],page:1,total:0},users:{data:[]},editing:null,pendingDelete:null};
 const posterCache=new Map();
 const $=id=>document.getElementById(id);
 const content=()=>$('content');
@@ -248,7 +252,20 @@ function langFlag(code){if(!code)return'';const flags={'en':'🇬🇧','ja':'�
 function qualityBadge(q){if(!q)return'';const cls=['4K','2160p'].includes(q)?'quality-4K':q==='1080p'?'quality-1080p':q==='720p'?'quality-720p':'quality-other';return`<span class="quality ${cls}">${q}</span>`}
 function ratingHTML(r){if(!r)return'';return`<span class="rating">⭐<span class="rating-num">${parseFloat(r).toFixed(1)}</span></span>`}
 function showToast(msg,type='info'){const ic=type==='success'?'✅':type==='error'?'❌':'ℹ️';const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span>${ic}</span><span>${msg}</span>`;$('toasts').appendChild(t);setTimeout(()=>t.remove(),3500)}
-async function api(method,path,body){const opts={method,headers:{'Content-Type':'application/json'}};if(body)opts.body=JSON.stringify(body);const r=await fetch(path,opts);if(!r.ok){const err=await r.json().catch(()=>({detail:r.statusText}));throw new Error(err.detail||r.statusText)}return r.json()}
+async function api(method,path,body){
+  let token=localStorage.getItem('jg-token');
+  const opts={method,headers:{'Content-Type':'application/json'}};
+  if(token) opts.headers['Authorization']=`Bearer ${token}`;
+  if(body)opts.body=JSON.stringify(body);
+  const r=await fetch(path,opts);
+  if(r.status===401&&path!=='/admin/login'){
+    localStorage.removeItem('jg-token');
+    $('login-modal').classList.add('open');
+    throw new Error('Unauthorized');
+  }
+  if(!r.ok){const err=await r.json().catch(()=>({detail:r.statusText}));throw new Error(err.detail||r.statusText)}
+  return r.json()
+}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function loadingHTML(size){const s=size==='small'?'style="padding:30px"':'';return`<div class="loading-wrap" ${s}><div class="spinner"></div><span>Loading…</span></div>`}
 function errorHTML(msg){return`<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Error</div><p style="color:var(--red)">${esc(msg)}</p></div>`}
@@ -265,8 +282,8 @@ async function fetchPoster(tmdb_id,type){const key=`${type}:${tmdb_id}`;if(poste
 function lazyPoster(tmdb_id,type,elId){fetchPoster(tmdb_id,type).then(d=>{const el=document.getElementById(elId);if(!el)return;if(d.poster_url){el.innerHTML=`<img src="${d.poster_url}" alt="poster" loading="lazy" onerror="this.remove()">`}const ovEl=document.getElementById(elId+'-ov');if(ovEl&&d.overview){ovEl.textContent=d.overview;ovEl.style.display='-webkit-box'}})}
 
 // ── Navigation ───────────────────────────────────────────────────
-function switchTab(tab){state.tab=tab;document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.tab===tab));const t={dashboard:'Dashboard',movies:'Movies',tv:'TV Shows',files:'Raw Files',search:'Search'};$('page-title').textContent=t[tab]||tab;render()}
-function render(){({dashboard:renderDashboard,movies:renderMovies,tv:renderTV,files:renderFiles,search:renderSearch})[state.tab]()}
+function switchTab(tab){state.tab=tab;document.querySelectorAll('.nav-item').forEach(el=>el.classList.toggle('active',el.dataset.tab===tab));const t={dashboard:'Dashboard',movies:'Movies',tv:'TV Shows',files:'Raw Files',users:'API Users',search:'Search'};$('page-title').textContent=t[tab]||tab;render()}
+function render(){({dashboard:renderDashboard,movies:renderMovies,tv:renderTV,files:renderFiles,users:renderUsers,search:renderSearch})[state.tab]()}
 
 // ── Dashboard ────────────────────────────────────────────────────
 async function renderDashboard(){content().innerHTML=loadingHTML();try{const [s,h]=await Promise.all([api('GET','/admin/stats'),api('GET','/admin/system-stats')]);state.stats=s;$('nav-movies-count').textContent=fmtNum(s.movies);$('nav-tv-count').textContent=fmtNum(s.tv_shows);$('nav-files-count').textContent=fmtNum(s.raw_files);let streamRows=h.active_streams.map(st=>{const title=st.filename||'Unknown';const speed=fmt(st.speed)+'/s';const mb_sent=fmt(st.bytes_sent);const total=fmt(st.size);const dc=st.dc_id||'?';const time_elapsed=Math.floor((Date.now()/1000)-st.start_time);return`<tr><td class="td-truncate" title="${esc(title)}">${esc(title)}</td><td>DC ${dc}</td><td>${mb_sent} / ${total}</td><td>${speed}</td><td>${time_elapsed}s</td></tr>`}).join('');let streamsTable=h.active_streams.length===0?`<div style="padding:20px;text-align:center;color:var(--text-dim)">No active streams.</div>`:`<div class="table-wrap"><table><thead><tr><th>Title</th><th>Node</th><th>Transferred</th><th>Speed</th><th>Time</th></tr></thead><tbody>${streamRows}</tbody></table></div>`;content().innerHTML=`<div class="stat-grid">${statCard('🎬','Movies',fmtNum(s.movies),'purple')}${statCard('📺','TV Shows',fmtNum(s.tv_shows),'green')}${statCard('📁','Raw Files',fmtNum(s.raw_files),'blue')}${statCard('💾','Total Storage',fmt(s.total_storage_bytes),'yellow')}</div><div class="section-header"><div class="section-title">System Health & Load</div></div><div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${statCard('🤖','Bots Online',`${h.clients_connected}/${h.clients_total}`,'green')}${statCard('⚡','Active Streams',h.active_streams.length,'purple')}${statCard('🗂️','Cached DB Lookups',h.cache_size,'blue')}<div class="stat-card red" style="cursor:pointer;text-align:center;border-color:var(--red)" onclick="clearSystemCache()"><div style="font-size:28px;margin-bottom:8px">🗑️</div><div style="font-weight:600;font-size:14px;color:var(--red)">Purge Cache</div></div></div><div class="section-header"><div class="section-title">Live Stream Analytics <button class="btn btn-ghost btn-sm btn-icon" style="margin-left:6px" onclick="renderDashboard()">🔄</button></div></div><div style="margin-bottom:32px">${streamsTable}</div><div class="section-header"><div class="section-title">Quick Access</div></div><div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${quickCard('🎬','Browse Movies','movies')}${quickCard('📺','Browse TV Shows','tv')}${quickCard('📁','Browse Files','files')}${quickCard('🔍','Search','search')}<div class="stat-card blue" style="cursor:pointer;text-align:center;border-color:var(--blue)" onclick="openSessionModal()"><div style="font-size:28px;margin-bottom:8px">🔑</div><div style="font-weight:600;font-size:14px;color:var(--blue)">Generate Session</div></div></div>`}catch(e){content().innerHTML=errorHTML(e.message)}}
@@ -315,7 +332,7 @@ function movieCard(m){
   const lang=m.original_language;
   const country=(m.origin_country||[]).join(', ');
   setTimeout(()=>lazyPoster(m.tmdb_id,'movie',pid),0);
-  return`<div class="media-card">
+  return`<div class="media-card" style="cursor:pointer" onclick="openMovieModal(${m.tmdb_id})">
     <div class="media-card-poster" id="${pid}"><span style="font-size:56px">🎬</span></div>
     <div class="media-card-body">
       <div class="media-card-title" title="${esc(m.title)}">${esc(m.title||'Unknown')}</div>
@@ -324,10 +341,9 @@ function movieCard(m){
       <div class="media-card-meta">${genres} ${qualities}</div>
       <div class="media-card-meta"><span class="meta-pill">📦 ${files.length} file${files.length!==1?'s':''}</span><span class="meta-pill">💾 ${fmt(totalSize)}</span></div>
       <div class="media-card-overview" id="${pid}-ov" style="display:none"></div>
-      ${streamUrlRows(files)}
       <div class="media-card-actions">
-        <button class="btn btn-ghost btn-sm" onclick="openEditMovie(${m.tmdb_id})">✏️ Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmDelete('Movie \u201c${esc(m.title)}\u201d',()=>deleteMovie(${m.tmdb_id}))">🗑️</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditMovie(${m.tmdb_id})">✏️ Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDelete('Movie \u201c${esc(m.title)}\u201d',()=>deleteMovie(${m.tmdb_id}))">🗑️</button>
       </div>
     </div></div>`}
 
@@ -339,21 +355,43 @@ function movieListItem(m){
   const pid=`mlp-${m.tmdb_id}`;
   setTimeout(()=>{fetchPoster(m.tmdb_id,'movie').then(d=>{const el=document.getElementById(pid);if(el&&d.poster_url){el.innerHTML=`<img src="${d.poster_url}" alt="" loading="lazy" onerror="this.remove()">`}})},0);
   const urlBtns=files.map(f=>{const url=`/dl?hash=${f.hash}`;return`<button class="btn btn-ghost btn-sm btn-icon" title="Copy stream URL (${f.quality||'file'})" onclick="event.stopPropagation();copyURL('${url}',this)">🔗</button>`}).join('');
-  return`<div class="media-list-item">
+  return`<div class="media-list-item" style="cursor:pointer" onclick="openMovieModal(${m.tmdb_id})">
     <div class="media-list-poster" id="${pid}">🎬</div>
     <div class="media-list-info">
       <div class="media-list-title" title="${esc(m.title)}">${esc(m.title||'Unknown')}</div>
       <div class="media-list-meta"><span class="media-card-badge badge-movie">Movie</span>${year} ${ratingHTML(m.rating)} ${qualities} <span class="meta-pill">📦 ${files.length}</span> <span class="meta-pill">💾 ${fmt(totalSize)}</span></div>
     </div>
     <div class="media-list-actions">
-      ${urlBtns}
-      <button class="btn btn-ghost btn-sm btn-icon" title="Edit" onclick="openEditMovie(${m.tmdb_id})">✏️</button>
-      <button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="confirmDelete('Movie \u201c${esc(m.title)}\u201d',()=>deleteMovie(${m.tmdb_id}))">🗑️</button>
+      <button class="btn btn-ghost btn-sm btn-icon" title="Edit" onclick="event.stopPropagation();openEditMovie(${m.tmdb_id})">✏️</button>
+      <button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="event.stopPropagation();confirmDelete('Movie \u201c${esc(m.title)}\u201d',()=>deleteMovie(${m.tmdb_id}))">🗑️</button>
     </div>
   </div>`}
 
 async function openEditMovie(tmdb_id){const m=state.movies.data.find(x=>x.tmdb_id===tmdb_id)||await api('GET',`/admin/movies/${tmdb_id}`);state.editing={type:'movie',id:tmdb_id,doc:m};$('modal-title').textContent='Edit Movie';$('modal-body').innerHTML=editFormHTML(m,['title','rating','release_date','runtime']);openModal()}
 async function deleteMovie(tmdb_id){try{await api('DELETE',`/admin/movies/${tmdb_id}`);showToast('Movie deleted','success');renderMovies()}catch(e){showToast(e.message,'error')}}
+
+function openMovieModal(tmdb_id){
+  const m=state.movies.data.find(x=>x.tmdb_id===tmdb_id);
+  if(!m)return;
+  $('mv-modal-title').textContent=m.title||'Movie';
+  const rawFiles=m.file_info||[];
+  const seen=new Set();
+  const files=rawFiles.filter(f=>{if(seen.has(f.hash))return false;seen.add(f.hash);return true});
+  let body='';
+  if(files.length===0){
+    body='<div style="padding:20px;text-align:center;color:var(--text-dim)">No files available.</div>';
+  } else {
+    const rows=files.map(f=>{
+      const url=`/dl?hash=${f.hash}`;
+      const ql=f.quality?qualityBadge(f.quality):'📄';
+      return`<div class="episode-row"><span style="flex:1;min-width:0;display:flex;align-items:center;gap:8px">${ql} <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.file_name||'File')}</span></span><span style="color:var(--text-dim);font-size:11px;flex-shrink:0">${fmt(f.file_size)}</span><a href="${url}" target="_blank" class="btn btn-primary btn-sm" style="display:inline-flex;gap:4px;text-decoration:none;flex-shrink:0" onclick="event.stopPropagation()">▶ Play</a></div>`
+    }).join('');
+    body=rows;
+  }
+  $('mv-modal-body').innerHTML=body;
+  $('movie-modal').classList.add('open');
+}
+function closeMovieModal(){$('movie-modal').classList.remove('open')}
 
 // ── TV Shows ─────────────────────────────────────────────────────
 const TV_SORT_OPTIONS=[{value:'date',label:'📅 Date'},{value:'title',label:'🔤 Title'},{value:'rating',label:'⭐ Rating'}];
@@ -366,7 +404,7 @@ function tvItem(show,seasons,epCount){
   const totalFiles=seasons.reduce((t,s)=>(s.episodes||[]).reduce((t2,ep)=>t2+(ep.file_info||[]).length,t),0);
   const pid=`tp-${show.tmdb_id}`;
   setTimeout(()=>{fetchPoster(show.tmdb_id,'tv').then(d=>{const el=document.getElementById(pid);if(el&&d.poster_url){el.innerHTML=`<img src="${d.poster_url}" alt="" loading="lazy" onerror="this.remove()">`}const ovEl=document.getElementById(pid+'-ov');if(ovEl&&d.overview){ovEl.textContent=d.overview;ovEl.style.display='-webkit-box'}})},0);
-  return`<div class="media-card">
+  return`<div class="media-card" style="cursor:pointer" onclick="openEpisodesModal(${show.tmdb_id})">
     <div class="media-card-poster" id="${pid}"><span style="font-size:56px">📺</span></div>
     <div class="media-card-body">
       <div class="media-card-title" title="${esc(show.title)}">${esc(show.title||'Unknown')}</div>
@@ -375,12 +413,9 @@ function tvItem(show,seasons,epCount){
       <div class="media-card-meta">${genres}</div>
       <div class="media-card-meta"><span class="meta-pill">📺 ${seasons.length} S · ${epCount} Ep</span><span class="meta-pill">📦 ${totalFiles} file${totalFiles!==1?'s':''}</span></div>
       <div class="media-card-overview" id="${pid}-ov" style="display:none"></div>
-      <div class="media-card-actions" style="margin-top:10px">
-        <button class="btn btn-primary btn-sm" style="flex:1;justify-content:center" onclick="openEpisodesModal(${show.tmdb_id})">▶️ Episodes</button>
-      </div>
       <div class="media-card-actions" style="margin-top:6px">
-        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="openEditTV(${show.tmdb_id})">✏️ Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="confirmDelete('TV Show \u201c${esc(show.title)}\u201d',()=>deleteTV(${show.tmdb_id}))">🗑️</button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="event.stopPropagation();openEditTV(${show.tmdb_id})">✏️ Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();confirmDelete('TV Show \u201c${esc(show.title)}\u201d',()=>deleteTV(${show.tmdb_id}))">🗑️</button>
       </div>
     </div></div>`}
 
@@ -391,7 +426,7 @@ function tvListItem(show){
   const totalFiles=seasons.reduce((t,s)=>(s.episodes||[]).reduce((t2,ep)=>t2+(ep.file_info||[]).length,t),0);
   const pid=`tlp-${show.tmdb_id}`;
   setTimeout(()=>{fetchPoster(show.tmdb_id,'tv').then(d=>{const el=document.getElementById(pid);if(el&&d.poster_url){el.innerHTML=`<img src="${d.poster_url}" alt="" loading="lazy" onerror="this.remove()">`}})},0);
-  return`<div class="media-list-item" style="cursor:pointer" onclick="switchTab('tv');setTimeout(()=>{state.tv.viewMode='grid';renderTV()},0)">
+  return`<div class="media-list-item" style="cursor:pointer" onclick="openEpisodesModal(${show.tmdb_id})">
     <div class="media-list-poster" id="${pid}">📺</div>
     <div class="media-list-info">
       <div class="media-list-title" title="${esc(show.title)}">${esc(show.title||'Unknown')}</div>
@@ -411,7 +446,22 @@ function openEpisodesModal(tmdb_id){
   if(!show)return;
   $('ep-modal-title').textContent = show.title;
   let seasonsHTML='';
-  for(const s of (show.seasons||[])){const eps=(s.episodes||[]).map(ep=>{const files=ep.file_info||[];const epSize=files.reduce((t,f)=>t+(f.file_size||0),0);const epUrlBtns=files.map(f=>{const url=`/dl?hash=${f.hash}`;const ql=f.quality?qualityBadge(f.quality)+' ':'';return`<button class="btn btn-ghost btn-sm btn-icon" title="Copy stream URL" onclick="event.stopPropagation();copyURL('${url}',this)">🔗</button>`}).join('');return`<div class="episode-row"><span class="episode-num">S${String(s.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ep.title||'Episode '+ep.episode_number)}</span>${files.map(f=>qualityBadge(f.quality)).join(' ')}<span style="color:var(--text-dim);font-size:11px">${fmt(epSize)}</span>${epUrlBtns}</div>`}).join('');seasonsHTML+=`<div class="season-header">Season ${s.season_number} · ${(s.episodes||[]).length} episodes</div>${eps}`}
+  for(const s of (show.seasons||[])){
+    const eps=(s.episodes||[]).map(ep=>{
+      const rawFiles=ep.file_info||[];
+      // Deduplicate files by hash
+      const seen=new Set();
+      const files=rawFiles.filter(f=>{if(seen.has(f.hash))return false;seen.add(f.hash);return true});
+      const epSize=files.reduce((t,f)=>t+(f.file_size||0),0);
+      const epUrlBtns=files.map(f=>{
+        const url=`/dl?hash=${f.hash}`;
+        const ql=f.quality?qualityBadge(f.quality):'📄';
+        return`<a href="${url}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-flex;gap:4px;text-decoration:none" title="Play ${f.quality||'file'}" onclick="event.stopPropagation()">${ql} ▶</a>`
+      }).join('');
+      return`<div class="episode-row"><span class="episode-num">S${String(s.season_number).padStart(2,'0')}E${String(ep.episode_number).padStart(2,'0')}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ep.title||'Episode '+ep.episode_number)}</span><span style="color:var(--text-dim);font-size:11px">${fmt(epSize)}</span><div style="display:flex;gap:4px;flex-shrink:0">${epUrlBtns}</div></div>`
+    }).join('');
+    seasonsHTML+=`<div class="season-header">Season ${s.season_number} · ${(s.episodes||[]).length} episodes</div>${eps}`
+  }
   if(!seasonsHTML) seasonsHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim)">No episodes found.</div>';
   $('ep-modal-body').innerHTML = seasonsHTML;
   $('episodes-modal').classList.add('open');
@@ -421,7 +471,8 @@ function closeEpisodesModal(){$('episodes-modal').classList.remove('open')}
 // ── Files ────────────────────────────────────────────────────────
 async function renderFiles(page){if(page)state.files.page=page;content().innerHTML=loadingHTML();try{const d=await api('GET',`/admin/files?page=${state.files.page}&per_page=20`);state.files.data=d.results;state.files.total=d.total;const rows=d.results.map(f=>{const url=`/dl?hash=${f.hash}`;return`<tr><td class="td-truncate" title="${esc(f.file_name)}">${esc(f.file_name||'–')}</td><td>${fmt(f.file_size)}</td><td>${qualityBadge(f.quality)}</td><td>${f.mime_type||'–'}</td><td class="td-mono">${f.hash}</td><td><div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm btn-icon" title="Copy stream URL" onclick="copyURL('${url}',this)">🔗</button><button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="confirmDelete('file \u201c${esc(f.file_name)}\u201d',()=>deleteFile('${f.hash}'))">🗑️</button></div></td></tr>`}).join('');content().innerHTML=`<div class="section-header"><div class="section-title">Raw Files <span style="color:var(--text-dim);font-size:13px;font-weight:400">(${fmtNum(d.total)} total)</span></div></div>${d.results.length===0?emptyState('📁','No raw files indexed yet'):`<div class="table-wrap"><table><thead><tr><th>Filename</th><th>Size</th><th>Quality</th><th>Type</th><th>Hash</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>${pagination(state.files.page,d.total,20,'renderFiles')}`}`}catch(e){content().innerHTML=errorHTML(e.message)}}
 async function deleteFile(hash){try{await api('DELETE',`/admin/files/${hash}`);showToast('File deleted','success');renderFiles()}catch(e){showToast(e.message,'error')}}
-function copyURL(url,btn){navigator.clipboard.writeText(window.location.origin+url).then(()=>{const o=btn.innerHTML;btn.innerHTML='✅';btn.classList.add('copied');setTimeout(()=>{btn.innerHTML=o;btn.classList.remove('copied')},1800)})}
+function copyText(val,btn){navigator.clipboard.writeText(val).then(()=>{const o=btn.innerHTML;btn.innerHTML='✅';btn.classList.add('copied');setTimeout(()=>{btn.innerHTML=o;btn.classList.remove('copied')},1800)})}
+function copyURL(url,btn){copyText(window.location.origin+url,btn)}
 
 // ── Search ───────────────────────────────────────────────────────
 let searchTimer=null;
@@ -441,6 +492,15 @@ function openModal(){$('edit-modal').classList.add('open')}function closeModal()
 function confirmDelete(label,fn){$('confirm-msg').innerHTML=`Delete ${label}?<br><span style="color:var(--red);font-size:12px">This action cannot be undone.</span>`;state.pendingDelete=fn;$('confirm-overlay').classList.add('open');$('confirm-ok').onclick=()=>{closeConfirm();fn()}}
 function closeConfirm(){$('confirm-overlay').classList.remove('open');state.pendingDelete=null}
 
+// ── Login ────────────────────────────────────────────────────────
+async function doLogin(){const u=$('login-user').value;const p=$('login-pass').value;if(!u||!p)return showToast('User and password required','error');$('btn-login').disabled=true;$('btn-login').innerHTML='Logging in...';try{const r=await api('POST','/admin/login',{username:u,password:p});localStorage.setItem('jg-token',r.token);$('login-modal').classList.remove('open');showToast('Logged in!','success');renderDashboard()}catch(e){showToast(e.message,'error')}finally{$('btn-login').disabled=false;$('btn-login').innerHTML='Log In'}}
+async function doLogout(){try{await api('POST','/admin/logout')}catch(e){}localStorage.removeItem('jg-token');location.reload()}
+
+// ── API Users ────────────────────────────────────────────────────
+async function renderUsers(){content().innerHTML=loadingHTML();try{const d=await api('GET','/admin/api-users');state.users.data=d.results;const rows=d.results.map(u=>`<tr><td><strong>${esc(u.name)}</strong></td><td class="td-mono">${esc(u.token)}</td><td><div style="display:flex;gap:6px"><button class="btn btn-ghost btn-sm btn-icon" title="Copy Token" onclick="copyText('${u.token}',this)">🔗</button><button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="confirmDelete('user \u201c${esc(u.name)}\u201d',()=>deleteUser('${u.token}'))">🗑️</button></div></td></tr>`).join('');content().innerHTML=`<div class="section-header"><div class="section-title">API Users  <span style="color:var(--text-dim);font-size:13px;font-weight:400">(${d.results.length} total)</span></div><button class="btn btn-primary" onclick="addUserPrompt()">+ Add User</button></div>${d.results.length===0?emptyState('👥','No API users created yet'):`<div class="table-wrap"><table><thead><tr><th>Name</th><th>Token String</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>`}`}catch(e){content().innerHTML=errorHTML(e.message)}}
+async function addUserPrompt(){const name=prompt('Enter name or label for the new API user:');if(!name)return;try{await api('POST','/admin/api-users',{name});showToast('User created','success');renderUsers()}catch(e){showToast(e.message,'error')}}
+async function deleteUser(token){try{await api('DELETE',`/admin/api-users/${token}`);showToast('User deleted','success');renderUsers()}catch(e){showToast(e.message,'error')}}
+
 // ── Session Generator ────────────────────────────────────────────
 let sessionState={phone:'',hash:''};
 function openSessionModal(){$('session-step-1').style.display='block';$('session-step-2').style.display='none';$('session-step-3').style.display='none';$('sess-phone').value='';$('sess-code').value='';$('sess-pwd').value='';$('sess-pwd-box').style.display='none';$('session-modal').classList.add('open');}
@@ -455,9 +515,20 @@ function pagination(current,total,perPage,fnName){const pages=Math.ceil(total/pe
 // ── Init ─────────────────────────────────────────────────────────
 $('edit-modal').addEventListener('click',e=>{if(e.target===$('edit-modal'))closeModal()});
 $('episodes-modal').addEventListener('click',e=>{if(e.target===$('episodes-modal'))closeEpisodesModal()});
+$('movie-modal').addEventListener('click',e=>{if(e.target===$('movie-modal'))closeMovieModal()});
 $('session-modal').addEventListener('click',e=>{if(e.target===$('session-modal'))closeSessionModal()});
 $('confirm-overlay').addEventListener('click',e=>{if(e.target===$('confirm-overlay'))closeConfirm()});
-renderDashboard();
+
+const urlParams = new URLSearchParams(window.location.search);
+if(urlParams.has('login')) {
+  localStorage.removeItem('jg-token');
+}
+
+if(!localStorage.getItem('jg-token')){
+  $('login-modal').classList.add('open');
+} else {
+  renderDashboard();
+}
 </script>
 </body>
 </html>
