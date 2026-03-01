@@ -58,22 +58,36 @@ async def verify_api_token(request: Request, token: str = None):
     raise HTTPException(status_code=401, detail="Invalid token")
 
 
-@stream_routes.get("/latest")
-async def stream_latest(page: int = Query(1), _=Depends(verify_api_token)):
+@stream_routes.get("/movies/latest")
+async def stream_latest_movies(page: int = Query(1), _=Depends(verify_api_token)):
     if page < 1:
         raise HTTPException(status_code=400, detail="Page must be positive integers")
 
-    data = await db.get_tmdb_latest(page=page)
+    data = await db.get_tmdb_latest(media_type="movie", page=page)
 
     if data is None:
         raise HTTPException(status_code=404, detail="Item not found")
 
     media_info = []
     for item in data:
-        if item["type"] == "movie":
-            media_info.append(extract_movie_info_raw(item))
-        elif item["type"] == "tv":
-            media_info.append(extract_show_info_raw(item))
+        media_info.append(extract_movie_info_raw(item))
+
+    return media_info
+
+
+@stream_routes.get("/series/latest")
+async def stream_latest_series(page: int = Query(1), _=Depends(verify_api_token)):
+    if page < 1:
+        raise HTTPException(status_code=400, detail="Page must be positive integers")
+
+    data = await db.get_tmdb_latest(media_type="tv", page=page)
+
+    if data is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    media_info = []
+    for item in data:
+        media_info.append(extract_show_info_raw(item))
 
     return media_info
 

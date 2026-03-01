@@ -157,10 +157,13 @@ class Database:
         return await cursor.to_list(length=per_page)
 
     async def get_tmdb_latest(
-        self, page: int = 1, per_page: int = 12
+        self, media_type: str = None, page: int = 1, per_page: int = 12
     ) -> List[Dict[str, Any]]:
         skip = (page - 1) * per_page
-        mydoc = self.tmdb_collection.find().sort("_id", -1).skip(skip).limit(per_page)
+        query = {}
+        if media_type:
+            query = {"type": media_type}
+        mydoc = self.tmdb_collection.find(query).sort("_id", -1).skip(skip).limit(per_page)
         mydoc_results = await mydoc.to_list(length=per_page)
         return mydoc_results
 
