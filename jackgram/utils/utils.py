@@ -36,12 +36,18 @@ async def extract_file_info(message, filename: str) -> Dict[str, Union[str, int]
 
     file_hash = hashlib.md5(f"{chat_id}_{message_id}".encode()).hexdigest()[:6]
 
-    resolution = PTN.parse(filename).get("resolution") or "other"
+    parsed = PTN.parse(filename)
+    resolution = parsed.get("resolution") or "other"
 
     return {
         "file_name": name,
         "file_size": size,
         "quality": resolution,
+        "source": parsed.get("quality"),
+        "video_codec": parsed.get("codec"),
+        "audio_codec": parsed.get("audio"),
+        "encoder": parsed.get("encoder"),
+        "hdr": parsed.get("hdr", False),
         "mime_type": mime_type,
         "chat_id": chat_id,
         "message_id": message_id,
@@ -184,6 +190,11 @@ def extract_show_info_raw(data: Dict) -> Dict:
                     "date": episode.get("date"),
                     "duration": episode.get("duration"),
                     "quality": info.get("quality"),
+                    "source": info.get("source"),
+                    "video_codec": info.get("video_codec"),
+                    "audio_codec": info.get("audio_codec"),
+                    "encoder": info.get("encoder"),
+                    "hdr": info.get("hdr", False),
                     "size": info.get("file_size"),
                     "url": generate_stream_url(
                         tmdb_id=data.get("tmdb_id"), file_hash=info.get("hash")
@@ -210,6 +221,11 @@ def extract_movie_info_raw(data: Dict) -> Dict:
             "title": info.get("file_name"),
             "mode": "movies",
             "quality": info.get("quality"),
+            "source": info.get("source"),
+            "video_codec": info.get("video_codec"),
+            "audio_codec": info.get("audio_codec"),
+            "encoder": info.get("encoder"),
+            "hdr": info.get("hdr", False),
             "size": info.get("file_size"),
             "url": generate_stream_url(
                 tmdb_id=data.get("tmdb_id"), file_hash=info.get("hash")
@@ -225,6 +241,11 @@ def extract_media_file_raw(result: Dict[str, Any]) -> Dict[str, Any]:
         "title": result.get("file_name"),
         "type": "file",
         "quality": result.get("quality"),
+        "source": result.get("source"),
+        "video_codec": result.get("video_codec"),
+        "audio_codec": result.get("audio_codec"),
+        "encoder": result.get("encoder"),
+        "hdr": result.get("hdr", False),
         "size": result.get("file_size"),
         "url": generate_stream_url_file(file_hash=result.get("hash")),
     }
@@ -247,6 +268,11 @@ def extract_show_info(
                             "date": episode.get("date"),
                             "duration": episode.get("duration"),
                             "quality": info.get("quality"),
+                            "source": info.get("source"),
+                            "video_codec": info.get("video_codec"),
+                            "audio_codec": info.get("audio_codec"),
+                            "encoder": info.get("encoder"),
+                            "hdr": info.get("hdr", False),
                             "size": info.get("file_size"),
                             "url": generate_stream_url(
                                 tmdb_id=tmdb_id, file_hash=info.get("hash")
@@ -268,6 +294,11 @@ def extract_movie_info(data: Dict, tmdb_id: int) -> List[Dict]:
             "date": release_date,
             "duration": runtime,
             "quality": info.get("quality"),
+            "source": info.get("source"),
+            "video_codec": info.get("video_codec"),
+            "audio_codec": info.get("audio_codec"),
+            "encoder": info.get("encoder"),
+            "hdr": info.get("hdr", False),
             "size": info.get("file_size"),
             "url": generate_stream_url(tmdb_id=tmdb_id, file_hash=info.get("hash")),
         }
