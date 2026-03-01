@@ -154,7 +154,7 @@ async def delete_movie(tmdb_id: int):
     existing = await db.get_tmdb(tmdb_id)
     if not existing or existing.get("type") != "movie":
         raise HTTPException(status_code=404, detail="Movie not found")
-    await db.del_tdmb(tmdb_id)
+    await db.del_tmdb(tmdb_id)
     return {"deleted": True, "tmdb_id": tmdb_id}
 
 
@@ -219,7 +219,7 @@ async def delete_tv_show(tmdb_id: int):
     existing = await db.get_tmdb(tmdb_id)
     if not existing or existing.get("type") != "tv":
         raise HTTPException(status_code=404, detail="TV show not found")
-    await db.del_tdmb(tmdb_id)
+    await db.del_tmdb(tmdb_id)
     return {"deleted": True, "tmdb_id": tmdb_id}
 
 

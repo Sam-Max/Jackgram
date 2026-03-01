@@ -12,10 +12,12 @@ from telethon import events, Button
 from telethon.errors import FloodWaitError
 
 from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot
+from jackgram.bot.auth import admin_only
 from jackgram.bot.utils import index_channel
 from jackgram.utils.telegram_stream import multi_session_manager
 from jackgram.utils.utils import (
-    extract_movie_info,
+    extract_media_file_raw,
+    extract_movie_info_raw,
     extract_show_info_raw,
 )
 
@@ -26,20 +28,27 @@ db = get_db()
 @StreamBot.on(events.NewMessage(pattern=r"^/start(?: |$)", func=lambda e: e.is_private))
 async def start(event):
     await event.reply(
-        "👋 Welcome to JackgramBot!\n\n"
-        "📌 Use /index to index files from a channel.\n"
-        "🔍 Use /search to find indexed files.\n"
-        "🗑️ Use /del to delete an entry by its IMDb ID.\n"
-        "📊 Use /count to see the total number of entries in the database.\n"
-        "💾 Use /save_db to back up the database.\n"
-        "📂 Use /load_db to restore the database from a backup.\n"
-        "❌ Use /del_db to delete a specific database.\n"
-        "🔑 Use /token to generate an access token.\n\n"
-        "🚀 Send a file to the logs channel to index it automatically!"
+        "👋 **Welcome to JackgramBot!**\n\n"
+        "**📌 Indexing**\n"
+        "/index — Index files from a channel (wizard or direct)\n\n"
+        "**🔍 Search & Browse**\n"
+        "/search `<query>` — Find indexed files\n"
+        "/count — Database statistics\n\n"
+        "**🗃️ Database Management**\n"
+        "/del `<tmdb_id>` — Delete a TMDb entry\n"
+        "/save_db — Back up the database\n"
+        "/load_db — Restore from backup (reply to JSON)\n"
+        "/del_db `<name>` — Delete a database\n\n"
+        "**🔧 Admin**\n"
+        "/token — Generate an API access token\n"
+        "/log — Download the bot log file\n\n"
+        "🧙‍♂️ **Contribute:** Send a media file directly to start the contribution wizard!\n"
+        "🚀 Files posted in indexed channels are auto-processed!"
     )
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/index(?: |$)", func=lambda e: e.is_private))
+@admin_only
 async def index(event):
     if not event.message.text:
         return
@@ -161,15 +170,39 @@ async def index(event):
         return
 
     # Shared Indexing Logic
+    total_range = last_id - first_id + 1
     try:
         start_message = (
-            "🔄 Perform this action only once\n\n"
-            "⏳ Files indexing is currently in progress.\n\n"
-            "🚫 Do not send any additional files or start indexing other channels until this process completes.\n\n"
+            "🔄 **Indexing in progress...**\n\n"
+            f"📡 Channel: `{chat_id}`\n"
+            f"📨 Range: `{first_id}` → `{last_id}` ({total_range} messages)\n\n"
+            "⏳ 0% — Starting...\n\n"
+            "🚫 Do not start another index until this completes."
         )
         wait_msg = await event.reply(start_message)
 
-        stats = await index_channel(client, chat_id, first_id, last_id)
+        # Progress callback updates the message periodically
+        async def on_progress(stats, current_id):
+            processed = current_id - first_id
+            pct = min(int(processed / total_range * 100), 100)
+            bar_filled = pct // 5
+            bar = "█" * bar_filled + "░" * (20 - bar_filled)
+            try:
+                await wait_msg.edit(
+                    f"🔄 **Indexing in progress...**\n\n"
+                    f"📡 Channel: `{chat_id}`\n"
+                    f"`{bar}` **{pct}%**\n\n"
+                    f"  ✅ Indexed: **{stats.get('indexed', 0)}**\n"
+                    f"  ⏭️ Skipped: {stats.get('skipped_no_media', 0) + stats.get('skipped_size', 0) + stats.get('skipped_keyword', 0) + stats.get('skipped_ext', 0)}\n"
+                    f"  ❌ Errors: {stats.get('errors', 0)}\n\n"
+                    f"📨 Message `{current_id}` / `{last_id}`"
+                )
+            except Exception:
+                pass  # Ignore edit failures (e.g. FloodWait)
+
+        stats = await index_channel(
+            client, chat_id, first_id, last_id, progress_callback=on_progress
+        )
 
         await wait_msg.delete()
 
@@ -179,7 +212,7 @@ async def index(event):
             + stats.get("skipped_ext", 0)
         )
         summary = (
-            "✅ Indexing complete!\n\n"
+            "✅ **Indexing complete!**\n\n"
             "📊 **Stats:**\n"
             f"  • Indexed: **{stats.get('indexed', 0)}**\n"
             f"  • Skipped (too small): {stats.get('skipped_size', 0)}\n"
@@ -192,14 +225,15 @@ async def index(event):
         await event.reply(summary)
 
     except FloodWaitError as e:
-        print(f"Sleeping for {e.seconds}s")
+        logging.warning(f"FloodWait during index: sleeping for {e.seconds}s")
         await sleep(e.seconds)
-        await event.reply(f"Got Floodwait of {e.seconds}s")
+        await event.reply(f"⏳ Got FloodWait of {e.seconds}s")
 
 
 @StreamBot.on(
     events.NewMessage(pattern=r"^/search(?: |$)", func=lambda e: e.is_private)
 )
+@admin_only
 async def search(event):
     if not event.message.text:
         return
@@ -207,66 +241,102 @@ async def search(event):
     if len(args) >= 1:
         search_query = " ".join(args)
     else:
-        await event.reply("Use /search query")
+        await event.reply("Use /search <query>")
         return
 
-    results, _ = await db.search_tmdb(search_query)
+    results, total = await db.search_tmdb(search_query)
     if not results:
         await event.reply("No results found.")
         return
 
-    result = results[0]
-    info = (
-        extract_movie_info(result, result.get("tmdb_id"))
-        if result["type"] == "movie"
-        else extract_show_info_raw(result)
-    )
+    all_files = []
+    for result in results[:5]:
+        result_type = result.get("type")
+        if result_type == "movie":
+            info = extract_movie_info_raw(result)
+            all_files.extend(info.get("files", []))
+        elif result_type == "tv":
+            info = extract_show_info_raw(result)
+            all_files.extend(info.get("files", []))
+        else:
+            all_files.append(extract_media_file_raw(result))
 
-    if not info.get("files"):
+    if not all_files:
         await event.reply("No files associated found.")
         return
 
     results_list = "\n".join(
-        f"{idx + 1}. [{file['title']}]({file['url']})"
-        for idx, file in enumerate(info["files"])
+        f"{idx + 1}. [{file.get('title', 'Unknown')}]({file.get('url', '#')})"
+        for idx, file in enumerate(all_files[:20])
     )
 
-    await event.reply(f"Results:\n\n{results_list}", link_preview=False)
+    await event.reply(
+        f'🔍 Found {total} result(s) for "{search_query}":\n\n{results_list}',
+        link_preview=False,
+    )
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/del(?: |$)", func=lambda e: e.is_private))
+@admin_only
 async def delete(event):
     if not event.message.text:
         return
     args = event.message.text.split()[1:]
     if len(args) == 1:
-        id = int(args[0])
+        try:
+            tmdb_id = int(args[0])
+        except ValueError:
+            await event.reply("❌ Invalid TMDb ID. Please provide a number.")
+            return
     else:
-        await event.reply("Use /del imdb_id")
+        await event.reply("Use /del <tmdb_id>")
         return
 
-    result = await db.del_tdmb(tmdb_id=id)
+    result = await db.del_tmdb(tmdb_id=tmdb_id)
 
     if result.deleted_count > 0:
-        await event.reply("Entry deleted successfully.")
+        await event.reply("✅ Entry deleted successfully.")
     else:
-        await event.reply("No document found with the given criteria")
+        await event.reply("No document found with the given TMDb ID.")
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/count(?: |$)", func=lambda e: e.is_private))
+@admin_only
 async def count(event):
-    result = await db.count_tmdb()
-    if result > 0:
-        await event.reply(f"There are {result} number of entries on the database")
-    else:
-        await event.reply("No document found with the given criteria")
+    movies = await db.count_movies()
+    tv = await db.count_tv()
+    files = await db.count_media_files()
+    total = movies + tv + files
+
+    from jackgram.utils.utils import get_readable_size
+
+    total_storage = await db.get_total_storage()
+    storage_str = get_readable_size(total_storage)
+
+    await event.reply(
+        "📊 **Database Statistics**\n\n"
+        f"🎬 Movies: **{movies}**\n"
+        f"📺 TV Shows: **{tv}**\n"
+        f"📁 Raw Files: **{files}**\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"📦 Total entries: **{total}**\n"
+        f"💾 Total storage: **{storage_str}**"
+    )
 
 
 @StreamBot.on(
     events.NewMessage(pattern=r"^/save_db(?: |$)", func=lambda e: e.is_private)
 )
+@admin_only
 async def save_database(event):
-    os.makedirs(BACKUP_DIR, exist_ok=True)
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+    except PermissionError:
+        await event.reply(
+            f"❌ Cannot create backup directory `{BACKUP_DIR}` — permission denied.\n"
+            "💡 Set `BACKUP_DIR` in config.env to a writable path."
+        )
+        return
 
     backup_data = {}
     collections = await db.list_collections()
@@ -275,25 +345,33 @@ async def save_database(event):
         cursor = collection.find({})
         data = await cursor.to_list(length=None)
 
+        serialized = []
         for doc in data:
-            doc["_id"] = str(doc["_id"])
+            doc_copy = doc.copy()
+            doc_copy["_id"] = str(doc_copy["_id"])
+            serialized.append(doc_copy)
 
-        backup_data[collection_name] = data
+        backup_data[collection_name] = serialized
 
     backup_file = os.path.join(BACKUP_DIR, "database_backup.json")
-    with open(backup_file, "w") as file:
-        json.dump(backup_data, file, indent=4)
+    try:
+        with open(backup_file, "w") as file:
+            json.dump(backup_data, file, indent=4)
+    except OSError as e:
+        await event.reply(f"❌ Failed to write backup file: {e}")
+        return
 
     await event.client.send_file(
         event.chat_id,
         file=backup_file,
-        caption="Backup completed! Here is your database backup file.",
+        caption="✅ Backup completed! Here is your database backup file.",
     )
 
 
 @StreamBot.on(
     events.NewMessage(pattern=r"^/load_db(?: |$)", func=lambda e: e.is_private)
 )
+@admin_only
 async def load_database(event):
     if not event.is_reply:
         await event.reply("Please reply to a JSON file with this command.")
@@ -337,9 +415,12 @@ async def load_database(event):
                 try:
                     document["_id"] = ObjectId(document["_id"])
                 except Exception:
+                    # Invalid ObjectId — insert as new document instead
                     document.pop("_id")
+                    await collection.insert_one(document)
+                    continue
                 await collection.update_one(
-                    {"_id": document.get("_id")},
+                    {"_id": document["_id"]},
                     {"$set": document},
                     upsert=True,
                 )
@@ -350,6 +431,7 @@ async def load_database(event):
 @StreamBot.on(
     events.NewMessage(pattern=r"^/del_db(?: |$)", func=lambda e: e.is_private)
 )
+@admin_only
 async def delete_database(event):
     if not event.message.text:
         return
@@ -357,14 +439,46 @@ async def delete_database(event):
     if len(args) == 1:
         database_name = args[0]
     else:
-        await event.reply("Use /del_db database_name")
+        await event.reply("Use /del_db <database_name>")
         return
 
-    await db.client.drop_database(database_name)
-    await event.reply(f"Database '{database_name}' has been deleted.")
+    await event.reply(
+        f"⚠️ **Are you sure you want to DELETE the entire `{database_name}` database?**\n\n"
+        "This action is **irreversible**.",
+        buttons=[
+            [
+                Button.inline(
+                    "✅ Yes, delete it",
+                    f"deldb_confirm:{database_name}".encode(),
+                ),
+            ],
+            [Button.inline("❌ Cancel", b"deldb_cancel")],
+        ],
+    )
+
+
+@StreamBot.on(events.CallbackQuery(pattern=b"deldb_"))
+async def delete_database_callback(event):
+    # Auth check — reuse ADMIN_IDS
+    from jackgram.bot.bot import ADMIN_IDS
+
+    if ADMIN_IDS and event.sender_id not in ADMIN_IDS:
+        await event.answer("⛔ Not authorized.", alert=True)
+        return
+
+    data = event.data.decode()
+    if data == "deldb_cancel":
+        await event.edit("❌ Database deletion cancelled.")
+        return
+
+    if data.startswith("deldb_confirm:"):
+        database_name = data.split(":", 1)[1]
+        await db.client.drop_database(database_name)
+        await event.edit(f"✅ Database `{database_name}` has been deleted.")
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/token(?: |$)", func=lambda e: e.is_private))
+@admin_only
 async def generate_token(event):
     sender = await event.get_sender()
     payload = {
@@ -376,6 +490,7 @@ async def generate_token(event):
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/log(?: |$)", func=lambda e: e.is_private))
+@admin_only
 async def send_log_file(event):
     log_file_path = os.path.join(os.getcwd(), "bot.log")
     if os.path.exists(log_file_path):

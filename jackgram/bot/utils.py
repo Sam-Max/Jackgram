@@ -2,7 +2,6 @@ import asyncio
 import logging
 import PTN
 import traceback
-import PTN
 from typing import Dict, Optional
 from telethon import TelegramClient
 from telethon.tl.types import Message
@@ -136,6 +135,7 @@ async def index_channel(
     first_message_id: int,
     last_message_id: int,
     batch_size: int = 50,
+    progress_callback=None,
 ) -> Dict[str, int]:
     """Index a range of messages from a channel, applying scraping filters.
 
@@ -151,6 +151,7 @@ async def index_channel(
         "errors": 0,
     }
 
+    progress_counter = 0
     current_message_id: int = first_message_id
     while current_message_id <= last_message_id:
         batch_message_ids: list[int] = list(
@@ -171,6 +172,9 @@ async def index_channel(
                 ):
                     stats["skipped_no_media"] += 1
                     await asyncio.sleep(1)
+                    progress_counter += 1
+                    if progress_callback and progress_counter % 25 == 0:
+                        await progress_callback(stats, message_id)
                     continue
 
                 title: str = get_file_title(orig_message)
@@ -200,6 +204,9 @@ async def index_channel(
                             "skipped_ext"
                         ] += 1  # Group multipart skip as extension/format skip
                     await asyncio.sleep(1)
+                    progress_counter += 1
+                    if progress_callback and progress_counter % 25 == 0:
+                        await progress_callback(stats, message_id)
                     continue
                 # ────────────────────────────────────────────────────
 
@@ -235,6 +242,11 @@ async def index_channel(
 
                 stats["indexed"] += 1
                 await asyncio.sleep(1)
+
+                progress_counter += 1
+                if progress_callback and progress_counter % 25 == 0:
+                    await progress_callback(stats, message_id)
+
             except Exception as e:
                 logging.error(f"Error indexing message {message_id}: {e}")
                 stats["errors"] += 1

@@ -65,6 +65,21 @@ try:
     AUTH_USERS = json.loads(AUTH_USERS)
 except json.JSONDecodeError:
     AUTH_USERS = {"admin": "admin"}
+
+# Bot command authorization – comma-separated Telegram user IDs
+_admin_ids_env = getenv("ADMIN_IDS", "")
+ADMIN_IDS: set[int] = set()
+if _admin_ids_env:
+    ADMIN_IDS = {
+        int(uid.strip()) for uid in _admin_ids_env.split(",") if uid.strip().isdigit()
+    }
+    logging.info(f"Authorized admin IDs: {ADMIN_IDS}")
+else:
+    logging.warning(
+        "ADMIN_IDS is not set – all private-chat users can execute bot commands. "
+        "Set ADMIN_IDS in config.env to restrict access."
+    )
+
 TMDB_LANGUAGE = getenv("TMDB_LANGUAGE", "en-US")
 WORKERS = int(getenv("WORKERS", "10"))
 

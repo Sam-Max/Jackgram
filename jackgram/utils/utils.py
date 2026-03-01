@@ -1,4 +1,5 @@
 from jackgram.bot.bot import BASE_URL, get_db
+import hashlib
 import re
 from jackgram.bot.bot import lock
 import PTN
@@ -31,8 +32,6 @@ async def extract_file_info(message, filename: str) -> Dict[str, Union[str, int]
 
     chat_id = message.chat_id
     message_id = message.id
-
-    import hashlib
 
     file_hash = hashlib.md5(f"{chat_id}_{message_id}".encode()).hexdigest()[:6]
 

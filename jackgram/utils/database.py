@@ -69,7 +69,7 @@ class Database:
 
         await self.tmdb_collection.replace_one({"tmdb_id": tmdb_id}, existing_media)
 
-    async def del_tdmb(self, tmdb_id: int) -> Any:
+    async def del_tmdb(self, tmdb_id: int) -> Any:
         return await self.tmdb_collection.delete_one({"tmdb_id": tmdb_id})
 
     async def count_tmdb(self) -> int:

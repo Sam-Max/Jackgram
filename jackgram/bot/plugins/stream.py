@@ -1,5 +1,6 @@
 from jackgram.bot.bot import StreamBot
 import asyncio
+import logging
 from telethon import events
 from telethon.errors import FloodWaitError
 import PTN
@@ -28,13 +29,7 @@ async def private_receive_handler(event):
         await index_queue.put(message)
 
     except FloodWaitError as e:
-        print(f"Sleeping for {e.seconds}s")
+        logging.warning(f"FloodWait in channel handler: sleeping for {e.seconds}s")
         await asyncio.sleep(e.seconds)
-        sender = await event.get_sender()
-        sender_name = getattr(sender, "first_name", "Unknown")
-        sender_id = getattr(sender, "id", "Unknown")
-        await event.client.send_message(
-            entity=event.chat_id,
-            message=f"Got FloodWait of {e.seconds}s from [{sender_name}](tg://user?id={sender_id})\n\n**USER ID:** `{sender_id}`",
-            link_preview=False,
-        )
+    except Exception as e:
+        logging.error(f"Error in channel auto-index handler: {e}")

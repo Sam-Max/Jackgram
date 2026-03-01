@@ -8,6 +8,7 @@ the TMDb API.
 
 import logging
 import os
+import re
 from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,9 @@ class ScrapingFilters:
             ext.lower() if ext.startswith(".") else f".{ext.lower()}"
             for ext in (allowed_extensions or DEFAULT_ALLOWED_EXTENSIONS)
         ]
+        self._multipart_pattern = re.compile(
+            r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE
+        )
 
     # ── public API ──────────────────────────────────────────────────────
 
@@ -94,12 +98,7 @@ class ScrapingFilters:
                 return True, f"Adult keyword detected: '{keyword}'"
 
         # 3. Multipart / Split file check (e.g., part1.rar, cd2.mkv)
-        import re
-
-        multipart_pattern = re.compile(
-            r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE
-        )
-        if multipart_pattern.search(filename):
+        if self._multipart_pattern.search(filename):
             return True, f"Multipart/Split file detected: '{filename}'"
 
         # 4. Extension check
