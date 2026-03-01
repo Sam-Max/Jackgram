@@ -1,11 +1,17 @@
 import asyncio
 import logging
 import PTN
-from typing import Optional
+from typing import Dict, Optional
 from telethon import TelegramClient
-from telethon.tl.types import Message, Document
+from telethon.tl.types import Message
 from telethon.errors import FloodWaitError
-from jackgram.bot.bot import LOGS_CHANNEL
+from jackgram.bot.bot import (
+    LOGS_CHANNEL,
+    INDEX_MIN_SIZE_MB,
+    INDEX_ADULT_KEYWORDS,
+    INDEX_ALLOWED_EXTENSIONS,
+)
+from jackgram.utils.scraping_filters import ScrapingFilters, _parse_csv
 from jackgram.utils.utils import (
     extract_file_info,
     format_filename,
@@ -14,6 +20,19 @@ from jackgram.utils.utils import (
     process_files,
     process_movie,
     process_series,
+)
+
+# ── Build the filters singleton from config ─────────────────────────────────
+
+_adult_kw = _parse_csv(INDEX_ADULT_KEYWORDS) if INDEX_ADULT_KEYWORDS else None
+_allowed_ext = (
+    _parse_csv(INDEX_ALLOWED_EXTENSIONS) if INDEX_ALLOWED_EXTENSIONS else None
+)
+
+scraping_filters = ScrapingFilters(
+    min_size_mb=INDEX_MIN_SIZE_MB,
+    adult_keywords=_adult_kw,
+    allowed_extensions=_allowed_ext,
 )
 
 
@@ -56,7 +75,21 @@ async def index_channel(
     first_message_id: int,
     last_message_id: int,
     batch_size: int = 50,
-) -> None:
+) -> Dict[str, int]:
+    """Index a range of messages from a channel, applying scraping filters.
+
+    Returns a stats dict with counters for indexed, skipped, and errored
+    messages.
+    """
+    stats: Dict[str, int] = {
+        "indexed": 0,
+        "skipped_size": 0,
+        "skipped_keyword": 0,
+        "skipped_ext": 0,
+        "skipped_no_media": 0,
+        "errors": 0,
+    }
+
     current_message_id: int = first_message_id
     while current_message_id <= last_message_id:
         batch_message_ids: list[int] = list(
@@ -70,36 +103,69 @@ async def index_channel(
                 message: Optional[Message] = await fetch_message(
                     client, chat_id, message_id
                 )
-                if message and message.media:
-                    title: str = get_file_title(message)
-                    filename: str = format_filename(title)
-                    file_info = await extract_file_info(message, filename)
+                if not message or not message.media:
+                    stats["skipped_no_media"] += 1
+                    await asyncio.sleep(1)
+                    continue
 
-                    data: dict = PTN.parse(filename)
-                    media_details_result = await get_media_details(data)
+                title: str = get_file_title(message)
+                filename: str = format_filename(title)
 
-                    media_id: Optional[str] = media_details_result.get("media_id")
-                    media_details: Optional[dict] = media_details_result.get(
-                        "media_details"
+                # ── Apply scraping filters ──────────────────────────
+                file_name = getattr(message.file, "name", "") or ""
+                file_size = getattr(message.file, "size", 0) or 0
+
+                skip, reason = scraping_filters.should_skip(
+                    filename=file_name, file_size=file_size
+                )
+                if skip:
+                    logging.info(
+                        f"Skipped message {message_id}: {reason} "
+                        f"(file: {file_name})"
                     )
-                    episode_details: Optional[dict] = media_details_result.get(
-                        "episode_details"
-                    )
+                    # Categorise the skip reason for stats
+                    if "too small" in (reason or ""):
+                        stats["skipped_size"] += 1
+                    elif "Adult keyword" in (reason or ""):
+                        stats["skipped_keyword"] += 1
+                    elif "extension" in (reason or "").lower():
+                        stats["skipped_ext"] += 1
+                    await asyncio.sleep(1)
+                    continue
+                # ────────────────────────────────────────────────────
 
-                    if media_id:
-                        if "season" in data and "episode" in data:
-                            await process_series(
-                                media_id,
-                                data,
-                                media_details,
-                                episode_details,
-                                file_info,
-                            )
-                        else:
-                            await process_movie(media_id, media_details, file_info)
+                file_info = await extract_file_info(message, filename)
+
+                data: dict = PTN.parse(filename)
+                media_details_result = await get_media_details(data)
+
+                media_id: Optional[str] = media_details_result.get("media_id")
+                media_details: Optional[dict] = media_details_result.get(
+                    "media_details"
+                )
+                episode_details: Optional[dict] = media_details_result.get(
+                    "episode_details"
+                )
+
+                if media_id:
+                    if "season" in data and "episode" in data:
+                        await process_series(
+                            media_id,
+                            data,
+                            media_details,
+                            episode_details,
+                            file_info,
+                        )
                     else:
-                        await process_files(file_info)
+                        await process_movie(media_id, media_details, file_info)
+                else:
+                    await process_files(file_info)
+
+                stats["indexed"] += 1
                 await asyncio.sleep(1)
             except Exception as e:
-                print(f"Error: {e}")
+                logging.error(f"Error indexing message {message_id}: {e}")
+                stats["errors"] += 1
         current_message_id += batch_size
+
+    return stats

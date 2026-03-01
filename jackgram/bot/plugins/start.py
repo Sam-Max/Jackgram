@@ -1,4 +1,6 @@
+import asyncio
 from asyncio import sleep
+import logging
 import json
 import os
 from datetime import datetime, timedelta
@@ -6,7 +8,7 @@ import jwt
 
 from bson.objectid import ObjectId
 
-from telethon import events
+from telethon import events, Button
 from telethon.errors import FloodWaitError
 
 from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot
@@ -42,31 +44,123 @@ async def index(event):
     if not event.message.text:
         return
     args = event.message.text.split()[1:]
+
+    # Power user: direct command with args
     if len(args) == 4:
-        chat_id, first_id, last_id = map(int, args[:-1])
-        client_type = args[-1]
+        try:
+            chat_id, first_id, last_id = map(int, args[:-1])
+            client_type = args[-1].lower()
 
-        if client_type == "bot":
-            client = StreamBot
-        elif client_type == "user":
-            client = await multi_session_manager.get_client()
-        else:
-            await event.reply("Invalid client type.")
+            if client_type == "bot":
+                client = StreamBot
+            elif client_type == "user":
+                client = await multi_session_manager.get_client()
+            else:
+                await event.reply("Invalid client type. Use 'bot' or 'user'.")
+                return
+
+            if last_id <= first_id:
+                await event.reply("The last_id must be greater than the first_id.")
+                return
+
+            # Continue to indexing logic below (shared)
+        except ValueError:
+            await event.reply("Invalid IDs. Please provide numbers.")
             return
 
-        if last_id <= first_id:
-            await event.reply(
-                "The second value (last_id) must be greater than the first value (first_id)."
-            )
-            return
+    # User friendly: Interactive Wizard
+    elif len(args) == 0:
+        sender_id = event.sender_id
+        async with StreamBot.conversation(event.chat_id, timeout=300) as conv:
+            try:
+                # Step 1: Chat ID
+                await conv.send_message(
+                    "🔍 **Indexing Wizard**\n\nPlease send the **Chat ID** or **Username** of the channel you want to index."
+                )
+                chat_reply = await conv.get_response()
+                chat_id = chat_reply.text.strip()
+                if chat_id.startswith("@"):
+                    pass  # Telethon handles usernames
+                elif chat_id.replace("-", "").isdigit():
+                    chat_id = int(chat_id)
+                else:
+                    await conv.send_message("❌ Invalid Chat ID or Username.")
+                    return
+
+                # Step 2: Range
+                await conv.send_message(
+                    "🔢 Send the **Start Message ID** and **End Message ID** separated by a space (e.g., `1 100`)."
+                )
+                range_reply = await conv.get_response()
+                try:
+                    first_id, last_id = map(int, range_reply.text.split())
+                    if last_id <= first_id:
+                        await conv.send_message(
+                            "❌ The end ID must be greater than the start ID."
+                        )
+                        return
+                except ValueError:
+                    await conv.send_message(
+                        "❌ Invalid range format. Please send two numbers separated by a space."
+                    )
+                    return
+
+                # Step 3: Client Type Buttons
+                prompt = await conv.send_message(
+                    "🤖 **Which client should I use for indexing?**\n\n"
+                    "• **Bot**: Faster to start, but subject to strict bot limits.\n"
+                    "• **User**: Uses your multi-session user accounts, better for large channels.",
+                    buttons=[
+                        [
+                            Button.inline("🤖 Bot", b"idx_bot"),
+                            Button.inline("👤 User", b"idx_user"),
+                        ],
+                        [Button.inline("❌ Cancel", b"idx_cancel")],
+                    ],
+                )
+
+                res = await conv.wait_event(
+                    events.CallbackQuery(func=lambda e: e.sender_id == sender_id)
+                )
+                action = res.data.decode()
+
+                if action == "idx_cancel":
+                    await res.edit("❌ Indexing cancelled.")
+                    return
+
+                client_type = "bot" if action == "idx_bot" else "user"
+
+                if client_type == "bot":
+                    client = StreamBot
+                else:
+                    client = await multi_session_manager.get_client()
+
+                await res.edit(
+                    f"✅ Selected: **{client_type.capitalize()}**\n⏳ Starting index..."
+                )
+
+            except asyncio.TimeoutError:
+                await conv.send_message("⏳ Indexing wizard timed out.")
+                return
+            except Exception as e:
+                logging.error(f"Index wizard error: {e}")
+                await conv.send_message(f"❌ Error: {e}")
+                return
     else:
         await event.reply(
-            "Usage: /index chat_id first_id last_id client_type\n\n"
-            "Example: /index 123456789 1 100 bot\n\n"
-            "Note: client_type must be either 'bot' or 'user'."
+            "🚀 **Quick Indexing**\n\n"
+            "Usage: `/index chat_id first_id last_id client_type`\n"
+            "Example: `/index -10012345 1 500 bot`\n\n"
+            "💡 Or just send `/index` without parameters to use the **wizard**!"
         )
         return
 
+    # Re-check client availability if selected via wizard/power user
+    if not client:
+        await event.reply("❌ Selected client is not available or configured.")
+        return
+
+    # Shared Indexing Logic
     try:
         start_message = (
             "🔄 Perform this action only once\n\n"
@@ -75,12 +169,27 @@ async def index(event):
         )
         wait_msg = await event.reply(start_message)
 
-        await index_channel(client, chat_id, first_id, last_id)
+        stats = await index_channel(client, chat_id, first_id, last_id)
 
         await wait_msg.delete()
-        await event.reply(
-            "✅ All your files have been successfully stored in the database!!\n\n"
+
+        total_skipped = (
+            stats.get("skipped_size", 0)
+            + stats.get("skipped_keyword", 0)
+            + stats.get("skipped_ext", 0)
         )
+        summary = (
+            "✅ Indexing complete!\n\n"
+            "📊 **Stats:**\n"
+            f"  • Indexed: **{stats.get('indexed', 0)}**\n"
+            f"  • Skipped (too small): {stats.get('skipped_size', 0)}\n"
+            f"  • Skipped (adult keyword): {stats.get('skipped_keyword', 0)}\n"
+            f"  • Skipped (invalid ext): {stats.get('skipped_ext', 0)}\n"
+            f"  • Skipped (no media): {stats.get('skipped_no_media', 0)}\n"
+            f"  • Errors: {stats.get('errors', 0)}\n\n"
+            f"Total skipped by filters: **{total_skipped}**"
+        )
+        await event.reply(summary)
 
     except FloodWaitError as e:
         print(f"Sleeping for {e.seconds}s")

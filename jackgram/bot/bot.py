@@ -80,6 +80,13 @@ USE_TOKEN_SYSTEM = USE_TOKEN_SYSTEM.strip().lower() == "true"
 
 PING_INTERVAL = int(getenv("PING_INTERVAL", "1200"))
 
+# Scraping Filters (used during /index)
+INDEX_MIN_SIZE_MB = int(getenv("INDEX_MIN_SIZE_MB", "50"))
+INDEX_ADULT_KEYWORDS = getenv("INDEX_ADULT_KEYWORDS", "")  # comma-separated overrides
+INDEX_ALLOWED_EXTENSIONS = getenv(
+    "INDEX_ALLOWED_EXTENSIONS", ""
+)  # comma-separated overrides
+
 StreamBot = TelegramClient(
     "stream_bot",
     api_id=API_ID,
