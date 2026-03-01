@@ -9,8 +9,12 @@ db = get_db()
 tmdb = get_tmdb()
 
 
-def get_file_title(file, message) -> str:
-    title = file.file_name or message.caption or file.file_id
+def get_file_title(message) -> str:
+    title = ""
+    if hasattr(message.file, "name") and message.file.name:
+        title = message.file.name
+    elif message.message:
+        title = message.message
     return title.replace("_", " ").replace(".", " ")
 
 
@@ -20,24 +24,27 @@ def format_filename(title: str) -> str:
     return filename.replace(".", " ")
 
 
-async def extract_file_info(file, message, filename: str) -> Dict[str, Union[str, int]]:
-    name = file.file_name
-    size = file.file_size
-    mime_type = file.mime_type
-    file_id = file.file_id
-    file_unique_id = file.file_unique_id
-    file_hash = file.file_unique_id[:6]
+async def extract_file_info(message, filename: str) -> Dict[str, Union[str, int]]:
+    name = getattr(message.file, "name", "unknown")
+    size = getattr(message.file, "size", 0)
+    mime_type = getattr(message.file, "mime_type", "unknown")
 
-    resolution = PTN.parse(filename).get("resolution") or (
-        message.video.height if message.video else "other"
-    )
+    chat_id = message.chat_id
+    message_id = message.id
+
+    import hashlib
+
+    file_hash = hashlib.md5(f"{chat_id}_{message_id}".encode()).hexdigest()[:6]
+
+    resolution = PTN.parse(filename).get("resolution") or "other"
+
     return {
         "file_name": name,
         "file_size": size,
         "quality": resolution,
         "mime_type": mime_type,
-        "file_id": file_id,
-        "file_unique_id": file_unique_id,
+        "chat_id": chat_id,
+        "message_id": message_id,
         "hash": file_hash,
     }
 
@@ -223,7 +230,6 @@ def extract_media_file_raw(result: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-
 def extract_show_info(
     data: Dict, season_num: int, episode_num: int, tmdb_id: int
 ) -> List[Dict]:
@@ -273,13 +279,16 @@ async def extract_media_by_hash(data: Dict, file_hash: str) -> Optional[Dict]:
     if data.get("type") == "tv":
         for season in data.get("seasons", []):
             for episode in season.get("episodes", []):
-                for info in episode["file_info"]:
+                for info in episode.get("file_info", []):
                     if info.get("hash") == file_hash:
                         return info
     elif data.get("type") == "movie":
-        for info in data["file_info"]:
+        for info in data.get("file_info", []):
             if info.get("hash") == file_hash:
                 return info
+    elif data.get("mode") == "multi":
+        if data.get("hash") == file_hash:
+            return data
 
 
 def get_readable_size(size_in_bytes: Union[int, str]) -> str:

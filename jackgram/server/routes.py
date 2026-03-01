@@ -8,20 +8,26 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from jackgram.bot.bot import StreamBot, get_db
 from jackgram.server.exceptions import FileNotFound, InvalidHash
-from jackgram.utils.custom_dl import TelegramStreamer
+
+from jackgram.utils.file_properties import get_file_info_dict
+from jackgram.utils.telegram_stream import (
+    TelegramSessionManager,
+    TelegramMediaRef,
+    ParallelTransferrer,
+)
 
 routes = APIRouter()
 
-class_cache = {}
 db = get_db()
+session_manager = TelegramSessionManager()
 
 
 @routes.get("/status")
 async def root_route_handler():
     return {
         "server_status": "running",
-        "telegram_bot": "@" + StreamBot.me.username,
-        "version": "0.0.1",
+        "telegram_bot": "jackgram",
+        "version": "1.0.0",
     }
 
 
@@ -47,23 +53,22 @@ async def media_streamer(request: Request, secure_hash: str):
     range_header = request.headers.get("Range")
     logging.info(f"Range header: {range_header}")
 
-    # Retrieve or initialize the TelegramStreamer instance
-    tg_connect = class_cache.get(StreamBot)
-    if not tg_connect:
-        logging.debug("Creating new TelegramStreamer object for client")
-        tg_connect = TelegramStreamer(StreamBot)
-        class_cache[StreamBot] = tg_connect
-
-    file_id = await tg_connect.get_file_properties(request, secure_hash)
+    media_dict = await get_file_info_dict(request, secure_hash)
+    if not media_dict:
+        raise FileNotFound
 
     # Validate secure hash
-    if file_id.unique_id[:6] != secure_hash:
-        logging.info(f"Invalid hash for message with ID {file_id.unique_id}")
+    if media_dict.get("hash") != secure_hash:
         raise InvalidHash
 
-    file_size = file_id.file_size
+    chat_id = media_dict.get("chat_id")
+    message_id = media_dict.get("message_id")
+    if not chat_id or not message_id:
+        raise FileNotFound
 
-    # Parse Range header or HTTP range
+    file_size = int(media_dict.get("file_size", 0))
+
+    # Parse Range header
     if range_header:
         try:
             from_bytes, until_bytes = range_header.replace("bytes=", "").split("-")
@@ -85,32 +90,28 @@ async def media_streamer(request: Request, secure_hash: str):
             headers={"Content-Range": f"bytes */{file_size}"},
         )
 
-    # Calculate offsets and chunk details
-    chunk_size = 1024 * 1024  # 1 MB
-    offset = from_bytes - (from_bytes % chunk_size)
-    first_part_cut = from_bytes - offset
-    last_part_cut = until_bytes % chunk_size + 1
     req_length = until_bytes - from_bytes + 1
-    part_count = math.ceil((until_bytes + 1) / chunk_size) - math.floor(
-        offset / chunk_size
+
+    # Initialize TelegramSessionManager to get client client and reference
+    client = await session_manager.get_client()
+    ref = TelegramMediaRef(chat_id=chat_id, message_id=message_id)
+
+    # Pre-validate file access
+    file_location, dc_id, actual_size_res = (
+        await session_manager._resolve_file_location(ref, file_size)
     )
 
-    # Stream the file
-    body = tg_connect.yield_file(
-        file_id, offset, first_part_cut, last_part_cut, part_count, chunk_size
+    # Stream the file using ParallelTransferrer
+    transferrer = ParallelTransferrer(client, dc_id=dc_id)
+    body = transferrer.download(
+        file=file_location,
+        file_size=file_size,
+        offset=from_bytes,
+        limit=req_length,
     )
 
-    # Determine MIME type and file name
-    mime_type = file_id.mime_type or "application/octet-stream"
-    file_name = file_id.file_name or f"{secrets.token_hex(2)}.unknown"
-
-    ## If not file name, it generates a random name with an inferred extension based on the MIME type.
-    if not file_id.file_name and file_id.mime_type:
-        try:
-            extension = file_id.mime_type.split("/")[1]
-            file_name = f"{secrets.token_hex(2)}.{extension}"
-        except (IndexError, AttributeError):
-            pass
+    mime_type = media_dict.get("mime_type", "application/octet-stream")
+    file_name = media_dict.get("file_name") or f"{secrets.token_hex(2)}.unknown"
 
     headers = {
         "Content-Type": mime_type,

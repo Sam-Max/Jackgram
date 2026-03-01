@@ -3,7 +3,8 @@ import logging
 from os import getenv
 import sys
 
-from pyrogram import Client
+from telethon import TelegramClient
+from telethon.sessions import StringSession
 from dotenv import load_dotenv
 
 from jackgram.utils.database import Database
@@ -60,29 +61,20 @@ BIND_ADDRESS = getenv("BIND_ADDRESS", "0.0.0.0")
 SECRET_KEY = getenv("SECRET_KEY", "your-secret-token")
 
 USE_TOKEN_SYSTEM = getenv("USE_TOKEN_SYSTEM", "True")
-USE_TOKEN_SYSTEM  = USE_TOKEN_SYSTEM.strip().lower() == "true"
+USE_TOKEN_SYSTEM = USE_TOKEN_SYSTEM.strip().lower() == "true"
 
 PING_INTERVAL = int(getenv("PING_INTERVAL", "1200"))
 
-StreamBot = Client(
-    name="stream_bot",
+StreamBot = TelegramClient(
+    "stream_bot",
     api_id=API_ID,
     api_hash=API_HASH,
-    bot_token=BOT_TOKEN,
-    plugins=dict(root="jackgram/bot/plugins"),
-    sleep_threshold=SLEEP_THRESHOLD,
-    workers=WORKERS,
-    max_concurrent_transmissions=100,
 )
 
-StreamUser = Client(
-    name="stream_user",
+StreamUser = TelegramClient(
+    StringSession(SESSION_STRING),
     api_id=API_ID,
     api_hash=API_HASH,
-    session_string=SESSION_STRING,
-    sleep_threshold=SLEEP_THRESHOLD,
-    no_updates=True,
-    in_memory=True,
 )
 
 

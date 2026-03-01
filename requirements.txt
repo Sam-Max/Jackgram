@@ -1,10 +1,10 @@
 fastapi
 uvicorn
-pyrofork
+telethon
 python-dotenv
 parse-torrent-title
 pyjwt
-tgcrypto
+cryptg
 motor
 aiofiles
 dnspython

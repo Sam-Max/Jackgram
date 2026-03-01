@@ -2,9 +2,9 @@ import asyncio
 import logging
 import PTN
 from typing import Optional
-from pyrogram import Client
-from pyrogram.types import Message, Document, Video
-from pyrogram.errors import FloodWait
+from telethon import TelegramClient
+from telethon.tl.types import Message, Document
+from telethon.errors import FloodWaitError
 from jackgram.bot.bot import LOGS_CHANNEL
 from jackgram.utils.utils import (
     extract_file_info,
@@ -18,16 +18,24 @@ from jackgram.utils.utils import (
 
 
 async def fetch_message(
-    client: Client, chat_id: int, message_id: int
+    client: TelegramClient, chat_id: int, message_id: int
 ) -> Optional[Message]:
     try:
-        message: Message = await client.get_messages(chat_id, message_id)
-        logging.debug(f"Fetched message: {message}")
-        if file := message.video or message.document:
-            return await send_message(client, message, file, LOGS_CHANNEL)
-    except FloodWait as e:
-        logging.warning(f"Rate limit hit. Waiting for {e.value} seconds.")
-        await asyncio.sleep(e.value)
+        messages = await client.get_messages(chat_id, ids=[message_id])
+        if not messages:
+            return None
+
+        message = messages[0]
+        if not message:
+            return None
+
+        logging.debug(f"Fetched message: {message.id}")
+        if message.document or message.photo or getattr(message, "video", None):
+            return await send_message(client, message, LOGS_CHANNEL)
+        return None
+    except FloodWaitError as e:
+        logging.warning(f"Rate limit hit. Waiting for {e.seconds} seconds.")
+        await asyncio.sleep(e.seconds)
         return await fetch_message(client, chat_id, message_id)
     except Exception as e:
         logging.error(f"An unexpected error occurred: {e}")
@@ -35,15 +43,15 @@ async def fetch_message(
 
 
 async def send_message(
-    client: Client, message: Message, file: Video | Document, dest_channel: int
+    client: TelegramClient, message: Message, dest_channel: int
 ) -> Message:
-    return await client.send_cached_media(
-        dest_channel, caption=message.caption, file_id=file.file_id
+    return await client.send_message(
+        dest_channel, message=message.message or "", file=message.media
     )
 
 
 async def index_channel(
-    client: Client,
+    client: TelegramClient,
     chat_id: int,
     first_message_id: int,
     last_message_id: int,
@@ -62,37 +70,35 @@ async def index_channel(
                 message: Optional[Message] = await fetch_message(
                     client, chat_id, message_id
                 )
-                if message:
-                    file: Optional[Video | Document] = message.video or message.document
-                    if file:
-                        title: str = get_file_title(file, message)
-                        filename: str = format_filename(title)
-                        file_info = await extract_file_info(file, message, filename)
+                if message and message.media:
+                    title: str = get_file_title(message)
+                    filename: str = format_filename(title)
+                    file_info = await extract_file_info(message, filename)
 
-                        data: dict = PTN.parse(filename)
-                        media_details_result = await get_media_details(data)
+                    data: dict = PTN.parse(filename)
+                    media_details_result = await get_media_details(data)
 
-                        media_id: Optional[str] = media_details_result.get("media_id")
-                        media_details: Optional[dict] = media_details_result.get(
-                            "media_details"
-                        )
-                        episode_details: Optional[dict] = media_details_result.get(
-                            "episode_details"
-                        )
+                    media_id: Optional[str] = media_details_result.get("media_id")
+                    media_details: Optional[dict] = media_details_result.get(
+                        "media_details"
+                    )
+                    episode_details: Optional[dict] = media_details_result.get(
+                        "episode_details"
+                    )
 
-                        if media_id:
-                            if "season" in data and "episode" in data:
-                                await process_series(
-                                    media_id,
-                                    data,
-                                    media_details,
-                                    episode_details,
-                                    file_info,
-                                )
-                            else:
-                                await process_movie(media_id, media_details, file_info)
+                    if media_id:
+                        if "season" in data and "episode" in data:
+                            await process_series(
+                                media_id,
+                                data,
+                                media_details,
+                                episode_details,
+                                file_info,
+                            )
                         else:
-                            await process_files(file_info)
+                            await process_movie(media_id, media_details, file_info)
+                    else:
+                        await process_files(file_info)
                 await asyncio.sleep(1)
             except Exception as e:
                 print(f"Error: {e}")

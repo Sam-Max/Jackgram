@@ -1,9 +1,7 @@
 from jackgram.bot.bot import StreamBot
 import asyncio
-from pyrogram import filters, Client
-from pyrogram.errors import FloodWait
-from pyrogram.types import Message
-from pyrogram.enums.parse_mode import ParseMode
+from telethon import events
+from telethon.errors import FloodWaitError
 import PTN
 from jackgram.utils.utils import (
     extract_file_info,
@@ -16,24 +14,16 @@ from jackgram.utils.utils import (
 )
 
 
-@StreamBot.on_message(
-    filters.channel
-    & (
-        filters.document
-        | filters.video
-        | filters.video_note
-        | filters.audio
-        | filters.voice
-        | filters.animation
-        | filters.photo
-    ),
-)
-async def private_receive_handler(bot: Client, message: Message):
+@StreamBot.on(events.NewMessage(func=lambda e: e.is_channel and e.media))
+async def private_receive_handler(event):
+    message = event.message
     try:
-        file = message.video or message.document
-        title = get_file_title(file, message)
+        if not message.media:
+            return
+
+        title = get_file_title(message)
         filename = format_filename(title)
-        file_info = await extract_file_info(file, message, filename)
+        file_info = await extract_file_info(message, filename)
 
         data = PTN.parse(filename)
         media_details_result = await get_media_details(data)
@@ -51,14 +41,15 @@ async def private_receive_handler(bot: Client, message: Message):
                 await process_movie(media_id, media_details, file_info)
         else:
             await process_files(file_info)
-            
-        
-    except FloodWait as e:
-        print(f"Sleeping for {str(e.value)}s")
-        await asyncio.sleep(e.value)
-        await bot.send_message(
-            chat_id=message.chat.id,
-            text=f"Got FloodWait of {str(e.value)}s from [{message.from_user.first_name}](tg://user?id={message.from_user.id})\n\n**ᴜsᴇʀ ɪᴅ :** `{str(message.from_user.id)}`",
-            disable_web_page_preview=True,
-            parse_mode=ParseMode.MARKDOWN,
+
+    except FloodWaitError as e:
+        print(f"Sleeping for {e.seconds}s")
+        await asyncio.sleep(e.seconds)
+        sender = await event.get_sender()
+        sender_name = getattr(sender, "first_name", "Unknown")
+        sender_id = getattr(sender, "id", "Unknown")
+        await event.client.send_message(
+            entity=event.chat_id,
+            message=f"Got FloodWait of {e.seconds}s from [{sender_name}](tg://user?id={sender_id})\n\n**USER ID:** `{sender_id}`",
+            link_preview=False,
         )

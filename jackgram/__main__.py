@@ -4,11 +4,17 @@ import logging
 import traceback
 import logging.handlers as handlers
 
-from jackgram.bot.bot import BIND_ADDRESS, PORT, SESSION_STRING, StreamBot, StreamUser
+from jackgram.bot.bot import (
+    BIND_ADDRESS,
+    PORT,
+    SESSION_STRING,
+    BOT_TOKEN,
+    StreamBot,
+    StreamUser,
+)
 from jackgram import app
 
 import uvicorn
-from pyrogram import idle
 
 
 logging.basicConfig(
@@ -36,9 +42,12 @@ async def start_services():
     server = uvicorn.Server(config)
     web_task = asyncio.create_task(server.serve())
 
+    import jackgram.bot.plugins.start
+    import jackgram.bot.plugins.stream
+
     logging.info("Initializing Bot Client...")
 
-    await StreamBot.start()
+    await StreamBot.start(bot_token=BOT_TOKEN)
 
     if len(SESSION_STRING) != 0:
         logging.info(f"Initializing User Client...")
@@ -46,15 +55,15 @@ async def start_services():
 
     logging.info("Services Started")
 
-    await idle()
+    await StreamBot.run_until_disconnected()
 
     logging.info("Cleaning up...")
     await cleanup(web_task)
 
 
 async def cleanup(web_task):
-    await StreamBot.stop()
-    await StreamUser.stop()
+    await StreamBot.disconnect()
+    await StreamUser.disconnect()
     web_task.cancel()
 
 
