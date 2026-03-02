@@ -99,3 +99,4 @@ bot.log
 movie.py
 tv.py
 jackgram_db/
+*.log
