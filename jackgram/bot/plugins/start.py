@@ -11,7 +11,7 @@ from bson.objectid import ObjectId
 from telethon import events, Button
 from telethon.errors import FloodWaitError
 
-from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot
+from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot, LOGS_CHANNELS
 from jackgram.bot.auth import admin_only
 from jackgram.bot.utils import index_channel
 from jackgram.utils.telegram_stream import multi_session_manager
@@ -20,7 +20,6 @@ from jackgram.utils.utils import (
     extract_movie_info_raw,
     extract_show_info_raw,
 )
-
 
 db = get_db()
 
@@ -54,11 +53,17 @@ async def index(event):
         return
     args = event.message.text.split()[1:]
 
+    selected_log_channel = LOGS_CHANNELS[0]["id"]
+
     # Power user: direct command with args
-    if len(args) == 4:
+    if len(args) >= 4:
         try:
-            chat_id, first_id, last_id = map(int, args[:-1])
-            client_type = args[-1].lower()
+            chat_id, first_id, count_msg = map(int, args[:3])
+            client_type = args[3].lower()
+            last_id = first_id + count_msg - 1
+
+            if len(args) == 5:
+                selected_log_channel = int(args[4])
 
             if client_type == "bot":
                 client = StreamBot
@@ -68,8 +73,8 @@ async def index(event):
                 await event.reply("Invalid client type. Use 'bot' or 'user'.")
                 return
 
-            if last_id <= first_id:
-                await event.reply("The last_id must be greater than the first_id.")
+            if count_msg <= 0:
+                await event.reply("The count must be greater than 0.")
                 return
 
             # Continue to indexing logic below (shared)
@@ -96,23 +101,62 @@ async def index(event):
                     await conv.send_message("❌ Invalid Chat ID or Username.")
                     return
 
-                # Step 2: Range
+                # Step 2: Range (First ID & Count)
                 await conv.send_message(
-                    "🔢 Send the **Start Message ID** and **End Message ID** separated by a space (e.g., `1 100`)."
+                    "🔢 Send the **Start Message ID** and the **Count of Messages** to index separated by a space (e.g., `1 100`)."
                 )
                 range_reply = await conv.get_response()
                 try:
-                    first_id, last_id = map(int, range_reply.text.split())
-                    if last_id <= first_id:
-                        await conv.send_message(
-                            "❌ The end ID must be greater than the start ID."
-                        )
+                    first_id, count_msg = map(int, range_reply.text.split())
+                    if count_msg <= 0:
+                        await conv.send_message("❌ The count must be greater than 0.")
                         return
+                    last_id = first_id + count_msg - 1
                 except ValueError:
                     await conv.send_message(
-                        "❌ Invalid range format. Please send two numbers separated by a space."
+                        "❌ Invalid format. Please send two numbers separated by a space."
                     )
                     return
+
+                # Step 2.5: Logs Channel
+                if len(LOGS_CHANNELS) > 1:
+                    log_buttons = []
+                    for i, ch_info in enumerate(LOGS_CHANNELS):
+                        log_buttons.append(
+                            Button.inline(
+                                f"{ch_info['name']}",
+                                f"idx_log_{i}".encode(),
+                            )
+                        )
+
+                    # split buttons in rows of 2
+                    formatted_buttons = [
+                        log_buttons[i : i + 2] for i in range(0, len(log_buttons), 2)
+                    ]
+                    formatted_buttons.append(
+                        [Button.inline("❌ Cancel", b"idx_cancel")]
+                    )
+
+                    log_prompt = await conv.send_message(
+                        "📂 **Which Logs Channel should I use?**",
+                        buttons=formatted_buttons,
+                    )
+
+                    res_log = await conv.wait_event(
+                        events.CallbackQuery(func=lambda e: e.sender_id == sender_id)
+                    )
+                    action_log = res_log.data.decode()
+
+                    if action_log == "idx_cancel":
+                        await res_log.edit("❌ Indexing cancelled.")
+                        return
+
+                    if action_log.startswith("idx_log_"):
+                        idx = int(action_log.split("_")[-1])
+                        selected_log_channel = LOGS_CHANNELS[idx]["id"]
+                        await res_log.edit(
+                            f"✅ Selected Logs Channel: **{LOGS_CHANNELS[idx]['name']}**"
+                        )
 
                 # Step 3: Client Type Buttons
                 prompt = await conv.send_message(
@@ -158,7 +202,7 @@ async def index(event):
     else:
         await event.reply(
             "🚀 **Quick Indexing**\n\n"
-            "Usage: `/index chat_id first_id last_id client_type`\n"
+            "Usage: `/index chat_id first_id count client_type [logs_channel]`\n"
             "Example: `/index -10012345 1 500 bot`\n\n"
             "💡 Or just send `/index` without parameters to use the **wizard**!"
         )
@@ -175,7 +219,8 @@ async def index(event):
         start_message = (
             "🔄 **Indexing in progress...**\n\n"
             f"📡 Channel: `{chat_id}`\n"
-            f"📨 Range: `{first_id}` → `{last_id}` ({total_range} messages)\n\n"
+            f"📨 Range: `{first_id}` → `{last_id}` ({total_range} messages)\n"
+            f"📂 Output: `{selected_log_channel}`\n\n"
             "⏳ 0% — Starting...\n\n"
             "🚫 Do not start another index until this completes."
         )
@@ -201,7 +246,12 @@ async def index(event):
                 pass  # Ignore edit failures (e.g. FloodWait)
 
         stats = await index_channel(
-            client, chat_id, first_id, last_id, progress_callback=on_progress
+            client,
+            chat_id,
+            first_id,
+            last_id,
+            progress_callback=on_progress,
+            logs_channel=selected_log_channel,
         )
 
         await wait_msg.delete()

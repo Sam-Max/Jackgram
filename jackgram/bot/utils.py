@@ -136,12 +136,15 @@ async def index_channel(
     last_message_id: int,
     batch_size: int = 50,
     progress_callback=None,
+    logs_channel: Optional[int] = None,
 ) -> Dict[str, int]:
     """Index a range of messages from a channel, applying scraping filters.
 
     Returns a stats dict with counters for indexed, skipped, and errored
     messages.
     """
+    if logs_channel is None:
+        logs_channel = LOGS_CHANNEL
     stats: Dict[str, int] = {
         "indexed": 0,
         "skipped_size": 0,
@@ -210,8 +213,8 @@ async def index_channel(
                     continue
                 # ────────────────────────────────────────────────────
 
-                # Forward message to LOGS_CHANNEL only if it passed all filters!
-                message = await send_message(client, orig_message, LOGS_CHANNEL)
+                # Forward message to selected logs_channel only if it passed all filters!
+                message = await send_message(client, orig_message, logs_channel)
 
                 file_info = await extract_file_info(message, filename)
 

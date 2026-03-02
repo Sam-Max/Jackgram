@@ -31,11 +31,28 @@ if not BOT_TOKEN:
     logging.error("BOT_TOKEN variable is missing! Exiting now")
     sys.exit(1)
 
-LOGS_CHANNEL = getenv("LOGS_CHANNEL")
-if not LOGS_CHANNEL:
+LOGS_CHANNELS_STR = getenv("LOGS_CHANNEL")
+if not LOGS_CHANNELS_STR:
     logging.error("LOGS_CHANNEL variable is missing! Exiting now")
     sys.exit(1)
-LOGS_CHANNEL = int(LOGS_CHANNEL)
+
+LOGS_CHANNELS = []
+for ch in LOGS_CHANNELS_STR.split(","):
+    ch = ch.strip()
+    if not ch:
+        continue
+    if ":" in ch:
+        cid, name = ch.split(":", 1)
+        LOGS_CHANNELS.append({"id": int(cid.strip()), "name": name.strip()})
+    else:
+        LOGS_CHANNELS.append({"id": int(ch), "name": f"Channel {ch}"})
+
+if not LOGS_CHANNELS:
+    logging.error("LOGS_CHANNEL variable is invalid! Exiting now")
+    sys.exit(1)
+
+# Keep the first one as default for backwards compatibility
+LOGS_CHANNEL = LOGS_CHANNELS[0]["id"]
 
 TMDB_API = getenv("TMDB_API")
 if not TMDB_API:

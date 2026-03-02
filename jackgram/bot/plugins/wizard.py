@@ -6,7 +6,7 @@ import PTN
 from telethon import events, Button
 from telethon.tl.types import Message
 
-from jackgram.bot.bot import StreamBot, LOGS_CHANNEL
+from jackgram.bot.bot import StreamBot, LOGS_CHANNELS
 from jackgram.bot.utils import send_message
 from jackgram.utils.utils import (
     extract_file_info,
@@ -156,6 +156,44 @@ async def wizard_start(event: Message):
                         await conv.send_message("❌ Invalid format. Wizard cancelled.")
                         return
 
+            # Step 3.5: Logs Channel
+            selected_log_channel = LOGS_CHANNELS[0]["id"]
+            if len(LOGS_CHANNELS) > 1:
+                log_buttons = []
+                for i, ch_info in enumerate(LOGS_CHANNELS):
+                    log_buttons.append(
+                        Button.inline(
+                            f"{ch_info['name']}",
+                            f"wiz_log_{i}".encode(),
+                        )
+                    )
+
+                formatted_buttons = [
+                    log_buttons[i : i + 2] for i in range(0, len(log_buttons), 2)
+                ]
+                formatted_buttons.append([Button.inline("❌ Cancel", b"cancel")])
+
+                log_prompt = await conv.send_message(
+                    "📂 **Which Logs Channel should I use to store this file?**",
+                    buttons=formatted_buttons,
+                )
+
+                res_log = await conv.wait_event(
+                    events.CallbackQuery(func=lambda e: e.sender_id == sender_id)
+                )
+                action_log = res_log.data.decode()
+
+                if action_log == "cancel":
+                    await res_log.edit("❌ Wizard cancelled.")
+                    return
+
+                if action_log.startswith("wiz_log_"):
+                    idx = int(action_log.split("_")[-1])
+                    selected_log_channel = LOGS_CHANNELS[idx]["id"]
+                    await res_log.edit(
+                        f"✅ Selected Logs Channel: **{LOGS_CHANNELS[idx]['name']}**"
+                    )
+
             # Step 4: Confirmation
             confirm_text = f"🍿 **Confirm Indexing**\n\nTitle: **{title}** ({year})\nType: **{type_str}**"
             if media_type == "series":
@@ -180,7 +218,7 @@ async def wizard_start(event: Message):
 
             # Step 5: Process and Index
             # Forward the message to the logs channel to safely store it
-            log_msg = await send_message(StreamBot, event, LOGS_CHANNEL)
+            log_msg = await send_message(StreamBot, event, selected_log_channel)
 
             # Extract file info from the new log message
             final_filename = format_filename(get_file_title(log_msg))
