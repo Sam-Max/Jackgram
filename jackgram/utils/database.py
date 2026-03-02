@@ -321,3 +321,37 @@ class Database:
     async def delete_api_user(self, token: str) -> bool:
         result = await self.api_users.delete_one({"token": token})
         return result.deleted_count > 0
+
+    async def del_by_chat_id(self, chat_id: int) -> Dict[str, int]:
+        """Deletes all occurrences of a chat_id across all collections."""
+        # 1. Delete from media_file_collection (Raw Files)
+        res_raw = await self.media_file_collection.delete_many({"chat_id": chat_id})
+
+        # 2. Pull from movies (file_info is top level array)
+        res_movies = await self.tmdb_collection.update_many(
+            {"type": "movie"}, {"$pull": {"file_info": {"chat_id": chat_id}}}
+        )
+
+        # 3. Pull from series (nested array: seasons.episodes.file_info)
+        res_tv = await self.tmdb_collection.update_many(
+            {"type": "tv"},
+            {"$pull": {"seasons.$[].episodes.$[].file_info": {"chat_id": chat_id}}},
+        )
+
+        # 4. Optional: Cleanup documents with no file_info left
+        # Cleanup movies
+        await self.tmdb_collection.delete_many(
+            {"type": "movie", "file_info": {"$size": 0}}
+        )
+
+        # Cleanup TV shows where ALL episodes have no files (simplified cleanup)
+        # We delete the whole show if all file_info lists in all episodes are empty
+        await self.tmdb_collection.delete_many(
+            {"type": "tv", "seasons.episodes.file_info": {"$size": 0}}
+        )
+
+        return {
+            "raw_deleted": res_raw.deleted_count,
+            "movies_modified": res_movies.modified_count,
+            "tv_modified": res_tv.modified_count,
+        }

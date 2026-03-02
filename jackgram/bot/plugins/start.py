@@ -38,6 +38,7 @@ async def start(event):
         "/count — Database statistics\n\n"
         "**🗃️ Database Management**\n"
         "/del `<tmdb_id>` — Delete a TMDb entry\n"
+        "/del_channel `<chat_id>` — Delete all entries for a chat\n"
         "/save_db — Back up the database\n"
         "/load_db — Restore from backup (reply to JSON)\n"
         "/del_db `<name>` — Delete a database\n\n"
@@ -351,6 +352,72 @@ async def delete(event):
         await event.reply("✅ Entry deleted successfully.")
     else:
         await event.reply("No document found with the given TMDb ID.")
+
+
+@StreamBot.on(
+    events.NewMessage(pattern=r"^/del_channel(?: |$)", func=lambda e: e.is_private)
+)
+@admin_only
+async def delete_channel(event):
+    if not event.message.text:
+        return
+    args = event.message.text.split()[1:]
+    if len(args) == 1:
+        try:
+            chat_id = int(args[0])
+        except ValueError:
+            await event.reply(
+                "❌ Invalid Chat ID. Please provide a number (e.g. `-10012345`)."
+            )
+            return
+    else:
+        await event.reply("Use /del_channel <chat_id>")
+        return
+
+    # Add confirmation
+    await event.reply(
+        f"⚠️ **Are you sure you want to delete all entries associated with chat `{chat_id}`?**",
+        buttons=[
+            [
+                Button.inline(
+                    "✅ Yes, delete",
+                    f"delch_confirm:{chat_id}".encode(),
+                ),
+            ],
+            [Button.inline("❌ Cancel", b"delch_cancel")],
+        ],
+    )
+
+
+@StreamBot.on(events.CallbackQuery(pattern=b"delch_"))
+async def delete_channel_callback(event):
+    # Auth check
+    from jackgram.bot.bot import ADMIN_IDS
+
+    if ADMIN_IDS and event.sender_id not in ADMIN_IDS:
+        await event.answer("⛔ Not authorized.", alert=True)
+        return
+
+    data = event.data.decode()
+    if data == "delch_cancel":
+        await event.edit("❌ Deletion cancelled.")
+        return
+
+    if data.startswith("delch_confirm:"):
+        chat_id = int(data.split(":", 1)[1])
+        await event.edit(f"⏳ Deleting entries for `{chat_id}`...")
+
+        stats = await db.del_by_chat_id(chat_id)
+
+        summary = (
+            f"✅ **Deletion Complete!**\n\n"
+            f"📊 **Stats:**\n"
+            f"  • Raw Files Deleted: **{stats['raw_deleted']}**\n"
+            f"  • Movies Modified: **{stats['movies_modified']}**\n"
+            f"  • TV Shows Modified: **{stats['tv_modified']}**\n\n"
+            "Entries with no remaining files were also removed."
+        )
+        await event.edit(summary)
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/count(?: |$)", func=lambda e: e.is_private))

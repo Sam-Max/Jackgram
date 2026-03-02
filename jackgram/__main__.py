@@ -51,6 +51,43 @@ async def start_services():
 
     await StreamBot.start(bot_token=BOT_TOKEN)
 
+    # Set the bot's commands
+    from telethon.tl.functions.bots import SetBotCommandsRequest
+    from telethon.tl.types import BotCommand, BotCommandScopeDefault
+
+    try:
+        commands = [
+            BotCommand(
+                command="start", description="Start interaction and show help message"
+            ),
+            BotCommand(
+                command="index",
+                description="Index files from a channel (wizard or direct)",
+            ),
+            BotCommand(command="search", description="Search indexed files"),
+            BotCommand(command="count", description="Database statistics"),
+            BotCommand(command="save_db", description="Back up the database"),
+            BotCommand(
+                command="load_db", description="Restore from backup (reply to JSON)"
+            ),
+            BotCommand(command="del", description="Delete a TMDb entry"),
+            BotCommand(
+                command="del_channel", description="Delete all entries for a chat ID"
+            ),
+            BotCommand(command="del_db", description="Delete a database"),
+            BotCommand(command="token", description="Generate an API access token"),
+            BotCommand(command="log", description="Download the bot log file"),
+        ]
+
+        await StreamBot(
+            SetBotCommandsRequest(
+                scope=BotCommandScopeDefault(), lang_code="", commands=commands
+            )
+        )
+        logging.info("Bot commands set successfully.")
+    except Exception as e:
+        logging.error(f"Failed to set bot commands: {e}")
+
     logging.info("Starting Async Indexing Queue Worker...")
     asyncio.create_task(process_index_queue())
 
