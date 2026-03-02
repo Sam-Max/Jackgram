@@ -22,6 +22,13 @@ class Database:
     async def get_media_file(self, hash: str) -> Optional[Dict[str, Any]]:
         return await self.media_file_collection.find_one({"hash": hash})
 
+    async def get_media_file_by_name_and_size(
+        self, file_name: str, file_size: int
+    ) -> Optional[Dict[str, Any]]:
+        return await self.media_file_collection.find_one(
+            {"file_name": file_name, "file_size": file_size}
+        )
+
     async def get_media_files(
         self, page: int, per_page: int = 11
     ) -> List[Dict[str, Any]]:
@@ -163,7 +170,9 @@ class Database:
         query = {}
         if media_type:
             query = {"type": media_type}
-        mydoc = self.tmdb_collection.find(query).sort("_id", -1).skip(skip).limit(per_page)
+        mydoc = (
+            self.tmdb_collection.find(query).sort("_id", -1).skip(skip).limit(per_page)
+        )
         mydoc_results = await mydoc.to_list(length=per_page)
         return mydoc_results
 
@@ -267,6 +276,13 @@ class Database:
                 None,
             ):
                 matched_file_episode.update(info)
+            elif any(
+                q.get("file_name") == info.get("file_name")
+                and q.get("file_size") == info.get("file_size")
+                for q in existing_episode["file_info"]
+            ):
+                # Omitir archivo duplicado por nombre y tamaño
+                continue
             else:
                 existing_episode["file_info"].append(info)
 
@@ -279,6 +295,13 @@ class Database:
                 None,
             ):
                 matched_file_movie.update(info)
+            elif any(
+                q.get("file_name") == info.get("file_name")
+                and q.get("file_size") == info.get("file_size")
+                for q in existing_media["file_info"]
+            ):
+                # Omitir archivo duplicado por nombre y tamaño
+                continue
             else:
                 existing_media["file_info"].append(info)
 

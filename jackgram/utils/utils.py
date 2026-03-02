@@ -144,7 +144,11 @@ async def process_files(file_info: Dict[str, Union[str, int]]) -> None:
         if existing_media:
             await db.update_media_file(media_doc)
         else:
-            await db.add_media_file(media_doc)
+            duplicate = await db.get_media_file_by_name_and_size(
+                file_info["file_name"], file_info["file_size"]
+            )
+            if not duplicate:
+                await db.add_media_file(media_doc)
 
 
 async def process_movie(
