@@ -36,7 +36,7 @@ from telethon.errors import (
 )
 from jackgram.utils.http_utils import (
     parse_range_header,
-    _content_disposition_inline,
+    _content_disposition_header,
     get_content_type,
 )
 
@@ -59,10 +59,13 @@ async def root_route_handler():
 @routes.head("/dl")
 @routes.get("/dl")
 async def stream_handler(
-    request: Request, hash: str = Query(...), _=Depends(verify_api_token)
+    request: Request,
+    hash: str = Query(...),
+    download: bool = Query(False),
+    _=Depends(verify_api_token),
 ):
     try:
-        return await media_streamer(request, hash)
+        return await media_streamer(request, hash, download)
     except InvalidHash as e:
         raise HTTPException(status_code=403, detail=e.message)
     except FileNotFound as e:
@@ -91,7 +94,7 @@ async def stream_handler(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def media_streamer(request: Request, secure_hash: str):
+async def media_streamer(request: Request, secure_hash: str, as_download: bool = False):
     """
     Handles streaming media files based on a secure hash and HTTP Range requests.
     """
@@ -123,7 +126,7 @@ async def media_streamer(request: Request, secure_hash: str):
             "Content-Type": content_type,
             "Content-Length": str(file_size),
             "Accept-Ranges": "bytes",
-            "Content-Disposition": _content_disposition_inline(file_name),
+            "Content-Disposition": _content_disposition_header(file_name, as_download),
         }
         return Response(headers=headers)
 
@@ -193,7 +196,7 @@ async def media_streamer(request: Request, secure_hash: str):
         "Content-Type": content_type,
         "Content-Length": str(req_length),
         "Accept-Ranges": "bytes",
-        "Content-Disposition": _content_disposition_inline(file_name),
+        "Content-Disposition": _content_disposition_header(file_name, as_download),
     }
 
     if range_header:

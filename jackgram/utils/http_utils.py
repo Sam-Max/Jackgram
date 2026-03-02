@@ -3,7 +3,7 @@ from urllib.parse import quote
 from typing import Optional
 
 
-def _content_disposition_inline(filename: str) -> str:
+def _content_disposition_header(filename: str, as_attachment: bool = False) -> str:
     """
     Build a Content-Disposition header value that is always latin-1 safe.
 
@@ -12,19 +12,21 @@ def _content_disposition_inline(filename: str) -> str:
     """
     # Sanitize newlines and carriage returns
     sanitized = (filename or "").strip().replace("\n", " ").replace("\r", " ")
+    disposition_type = "attachment" if as_attachment else "inline"
+
     if not sanitized:
-        return "inline"
+        return disposition_type
 
     try:
         # Try if the filename is latin-1 encodable
         sanitized.encode("latin-1")
         # For the filename= parameter, we must escape backslashes and double quotes
         escaped = sanitized.replace("\\", "\\\\").replace('"', '\\"')
-        return f'inline; filename="{escaped}"'
+        return f'{disposition_type}; filename="{escaped}"'
     except UnicodeEncodeError:
         # For filename*, use percent-encoding with the original (unescaped) sanitized name
         encoded = quote(sanitized, encoding="utf-8", safe="")
-        return f"inline; filename*=UTF-8''{encoded}"
+        return f"{disposition_type}; filename*=UTF-8''{encoded}"
 
 
 def get_content_type(mime_type: str, file_name: Optional[str] = None) -> str:
