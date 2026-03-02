@@ -2188,7 +2188,8 @@
               const ql = f.quality ? qualityBadge(f.quality) : "📄";
               const appLink = getExternalPlayerUrl(url);
               const dlLink = getDownloadUrl(url);
-              return `<div class="episode-row"><span style="flex:1;min-width:0;display:flex;align-items:center;gap:8px">${ql} <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.file_name || "File")}</span></span><span style="color:var(--text-dim);font-size:11px;flex-shrink:0">${fmt(f.file_size)}</span><div style="display:flex;gap:4px;flex-shrink:0"><a href="${url}" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none" onclick="event.stopPropagation()">▶ Play</a><a href="${appLink}" class="btn btn-app btn-sm" style="text-decoration:none" onclick="event.stopPropagation()">📱 App</a><a href="${dlLink}" class="btn btn-download btn-sm" style="text-decoration:none" onclick="event.stopPropagation()">⬇️ DL</a></div></div>`;
+              const streamLink = getStreamUrl(url);
+              return `<div class="episode-row"><span style="flex:1;min-width:0;display:flex;align-items:center;gap:8px">${ql} <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.file_name || "File")}</span></span><span style="color:var(--text-dim);font-size:11px;flex-shrink:0">${fmt(f.file_size)}</span><div style="display:flex;gap:4px;flex-shrink:0"><a href="${streamLink}" target="_blank" class="btn btn-primary btn-sm" style="text-decoration:none" onclick="event.stopPropagation()">▶ Play</a><a href="${appLink}" class="btn btn-app btn-sm" style="text-decoration:none" onclick="event.stopPropagation()">📱 App</a><a href="${dlLink}" class="btn btn-download btn-sm" style="text-decoration:none" onclick="event.stopPropagation()">⬇️ DL</a></div></div>`;
             })
             .join("");
           body = rows;
@@ -2391,7 +2392,8 @@
                   const ql = f.quality ? qualityBadge(f.quality) : "📄";
                   const appLink = getExternalPlayerUrl(url);
                   const dlLink = getDownloadUrl(url);
-                  return `<a href="${url}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-flex;gap:4px;text-decoration:none" title="Play ${f.quality || "file"}" onclick="event.stopPropagation()">${ql} ▶</a><a href="${appLink}" class="btn btn-app btn-sm" style="display:inline-flex;text-decoration:none" title="Open in External App" onclick="event.stopPropagation()">📱 App</a><a href="${dlLink}" class="btn btn-download btn-sm" style="display:inline-flex;text-decoration:none" title="Download" onclick="event.stopPropagation()">⬇️ DL</a>`;
+                  const streamLink = getStreamUrl(url);
+                  return `<a href="${streamLink}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-flex;gap:4px;text-decoration:none" title="Play ${f.quality || "file"}" onclick="event.stopPropagation()">${ql} ▶</a><a href="${appLink}" class="btn btn-app btn-sm" style="display:inline-flex;text-decoration:none" title="Open in External App" onclick="event.stopPropagation()">📱 App</a><a href="${dlLink}" class="btn btn-download btn-sm" style="display:inline-flex;text-decoration:none" title="Download" onclick="event.stopPropagation()">⬇️ DL</a>`;
                 })
                 .join("");
               return `<div class="episode-row"><span class="episode-num">S${String(s.season_number).padStart(2, "0")}E${String(ep.episode_number).padStart(2, "0")}</span><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(ep.title || "Episode " + ep.episode_number)}</span><span style="color:var(--text-dim);font-size:11px">${fmt(epSize)}</span><div style="display:flex;gap:4px;flex-shrink:0">${epUrlBtns}</div></div>`;
@@ -2487,6 +2489,16 @@
         return finalPath;
       }
 
+      function getStreamUrl(urlPath) {
+        let finalPath = urlPath;
+        let token = localStorage.getItem("jg-token");
+        if (token) {
+          const sep = finalPath.includes("?") ? "&" : "?";
+          finalPath += `${sep}token=${token}`;
+        }
+        return finalPath;
+      }
+
       // ── Search ───────────────────────────────────────────────────────
       let searchTimer = null;
       function renderSearch() {
@@ -2569,7 +2581,8 @@
         } else if (url) {
           const appLink = getExternalPlayerUrl(url);
           const dlLink = getDownloadUrl(url);
-          actions = `<div style="display:flex;gap:6px;margin-top:6px"><a href="${url}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-flex">▶️ Stream</a><a href="${appLink}" class="btn btn-app btn-sm" style="display:inline-flex;text-decoration:none">📱 App</a><a href="${dlLink}" class="btn btn-download btn-sm" style="display:inline-flex;text-decoration:none">⬇️ DL</a></div>`;
+          const streamLink = getStreamUrl(url);
+          actions = `<div style="display:flex;gap:6px;margin-top:6px"><a href="${streamLink}" target="_blank" class="btn btn-ghost btn-sm" style="display:inline-flex">▶️ Stream</a><a href="${appLink}" class="btn btn-app btn-sm" style="display:inline-flex;text-decoration:none">📱 App</a><a href="${dlLink}" class="btn btn-download btn-sm" style="display:inline-flex;text-decoration:none">⬇️ DL</a></div>`;
         }
 
         return `<div class="search-card"><div class="search-card-icon" id="${pid}">${icon}</div><div class="search-card-body"><div class="search-card-title">${esc(r.title || "–")}</div><div class="search-card-meta"><span class="media-card-badge ${badge}">${typeLabel}</span>${meta ? `<span style="margin-left:6px">${meta}</span>` : ""}${r.quality ? qualityBadge(r.quality) : ""}</div>${actions}</div></div>`;
