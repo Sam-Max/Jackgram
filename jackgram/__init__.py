@@ -1,3 +1,5 @@
+__version__ = "1.1.0"
+
 import os
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles

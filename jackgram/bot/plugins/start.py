@@ -21,12 +21,15 @@ from jackgram.utils.utils import (
     extract_show_info_raw,
 )
 
+from jackgram import __version__
+
 db = get_db()
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/start(?: |$)", func=lambda e: e.is_private))
 async def start(event):
     await event.reply(
+        f"🚀 **Jackgram v{__version__}**\n\n"
         "👋 **Welcome to JackgramBot!**\n\n"
         "**📌 Indexing**\n"
         "/index — Index files from a channel (wizard or direct)\n\n"

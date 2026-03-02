@@ -40,6 +40,8 @@ from jackgram.utils.http_utils import (
     get_content_type,
 )
 
+from jackgram import __version__
+
 routes = APIRouter()
 
 db = get_db()
@@ -50,7 +52,7 @@ async def root_route_handler():
     return {
         "server_status": "running",
         "telegram_bot": "jackgram",
-        "version": "1.0.0",
+        "version": __version__,
     }
 
 

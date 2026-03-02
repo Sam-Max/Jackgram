@@ -7,6 +7,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Version](https://img.shields.io/badge/version-1.1.0-orange.svg)](https://github.com/Sam-Max/Jackgram)
 [![Telethon](https://img.shields.io/badge/Telethon-1.24+-3171A5.svg?logo=telegram&logoColor=white)](https://docs.telethon.dev/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 
@@ -36,6 +37,8 @@ Jackgram allows you to index media files from public and private Telegram channe
 - 🎬 **TMDb Integration**: Automatically fetches rich metadata (titles, posters, plot) via The Movie Database API.
 - 🐳 **Docker Ready**: Deploy in seconds using Docker and Docker Compose.
 - 🔄 **Backup & Restore**: Easily backup your entire database to JSON and restore it whenever needed.
+- 📂 **Multi-Log Channels**: Configure multiple named log channels for organized file forwarding and easy selection.
+- 🛡️ **Duplicate Prevention**: Automatic detection and skipping of duplicate files based on name and size to maintain database integrity.
 
 ---
 
@@ -87,7 +90,7 @@ Fill your `config.env` with these essential variables. You can get Telegram API 
 | `API_HASH` | Your Telegram API Hash | Required |
 | `BOT_TOKEN` | Telegram Bot Token ([@BotFather](https://t.me/BotFather)) | Required |
 | `TMDB_API` | TMDb API Key | Required |
-| `LOGS_CHANNEL` | Channel ID where indexed data is stored | Required |
+| `LOGS_CHANNEL` | Comma-separated channel IDs with optional names (e.g., `-1001:Movies,-1002:Series`) | Required |
 | `BASE_URL` | Public IP/Domain of your server | Required |
 | `DATABASE_URL` | MongoDB connection string | `mongodb://admin:admin@mongo:27017` |
 | `SESSION_STRINGS` | Telethon session string(s) for private channels/streaming (single, comma-separated, or JSON array) | Optional |
@@ -110,7 +113,7 @@ The bot provides a set of admin commands to manage your index:
 | Command | Description |
 | :--- | :--- |
 | `/start` | Show welcome message and categorized command list. |
-| `/index` | Interactive wizard or direct command to index a channel with live progress. |
+| `/index` | Interactive wizard or direct command to index a channel by count (`/index start_id count`) with live progress. |
 | `/search` | Search indexed files (Movies, TV Shows, and Raw Files) via the bot. |
 | `/count` | Detailed database stats including breakdown by type and total storage used. |
 | `/del` | Delete an entry from the index by providing its TMDb ID. |

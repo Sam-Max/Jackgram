@@ -10,7 +10,7 @@ from jackgram.bot.bot import (
     BOT_TOKEN,
     StreamBot,
 )
-from jackgram import app
+from jackgram import app, __version__
 
 import uvicorn
 
@@ -35,6 +35,7 @@ bot_logger = logging.getLogger("jackgram").setLevel(logging.DEBUG)
 
 
 async def start_services():
+    logging.info(f"Initializing Jackgram v{__version__}...")
     logging.info("Initializing Web Server...")
     config = uvicorn.Config(app, host=BIND_ADDRESS, port=PORT, log_level="info")
     server = uvicorn.Server(config)
