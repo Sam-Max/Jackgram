@@ -70,18 +70,18 @@ async def get_media_details(
     media_id = None
 
     if "season" in data and "episode" in data:
-        media_id = tmdb.find_media_id(title=title, data_type="series", year=year)
+        media_id = await tmdb.find_media_id(title=title, data_type="series", year=year)
         if media_id:
-            episode_details = tmdb.get_episode_details(
+            episode_details = await tmdb.get_episode_details(
                 tmdb_id=media_id,
                 episode_number=data.get("episode"),
                 season_number=data.get("season"),
             )
     else:
-        media_id = tmdb.find_media_id(title=title, data_type="movie", year=year)
+        media_id = await tmdb.find_media_id(title=title, data_type="movie", year=year)
 
     if media_id:
-        details = tmdb.get_details(
+        details = await tmdb.get_details(
             tmdb_id=media_id, data_type="movie" if "episode" not in data else "series"
         )
 

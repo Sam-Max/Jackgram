@@ -8,5 +8,4 @@ cryptg
 motor
 aiofiles
 dnspython
-requests
 httpx

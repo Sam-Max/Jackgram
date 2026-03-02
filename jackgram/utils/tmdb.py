@@ -2,33 +2,33 @@ import logging
 from math import ceil
 import re
 from typing import Optional
-from requests.sessions import Session
+import httpx
 from jackgram.bot.bot import TMDB_API, TMDB_LANGUAGE
 
 
 class TMDBClient:
     def __init__(self):
-        self.client = Session()
         self.api_key = TMDB_API
         self.language = TMDB_LANGUAGE
 
-    def get_episode_details(
+    async def get_episode_details(
         self, tmdb_id: int, episode_number: int, season_number: int = 1
     ) -> dict:
         """Get the details of a specific episode from the API"""
         url = f"https://api.themoviedb.org/3/tv/{tmdb_id}/season/{season_number}/episode/{episode_number}"
-        response = self.client.get(
-            url, params={"api_key": self.api_key, "language": self.language}
-        )
-        if response.status_code == 200:
-            return response.json()
-        else:
-            logging.error(
-                f"Failed to fetch episode details for TMDB ID {tmdb_id}, season {season_number}, episode {episode_number}. Status code: {response.status_code}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                url, params={"api_key": self.api_key, "language": self.language}
             )
-            return {}
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logging.error(
+                    f"Failed to fetch episode details for TMDB ID {tmdb_id}, season {season_number}, episode {episode_number}. Status code: {response.status_code}"
+                )
+                return {}
 
-    def find_media_id(
+    async def find_media_id(
         self,
         title: str,
         data_type: str,
@@ -51,47 +51,53 @@ class TMDBClient:
             logging.info("Searching using Tmdb API for: '%s'", title)
             type_name = "tv" if data_type == "series" else "movie"
 
-            def search_tmdb(query_year):
+            async def search_tmdb(query_year, client):
                 params = {
                     "query": title,
-                    "include_adult": adult,
-                    "page": 1,
+                    "include_adult": str(adult).lower(),
+                    "page": "1",
                     "language": self.language,
                     "api_key": self.api_key,
                 }
                 if query_year:
-                    params["primary_release_year"] = query_year
+                    params["primary_release_year"] = str(query_year)
 
-                resp = self.client.get(f"https://api.themoviedb.org/3/search/{type_name}", params=params)
-                return resp
-
-            # Attempt to search with year
-            resp = search_tmdb(year)
-            if resp.status_code == 200:
-                results = resp.json().get("results", [])
-                if not results and year:
-                    # Retry without year if no results are found
-                    logging.error(
-                        f"No results found for '{title}' with year {year}. Retrying without year."
-                    )
-                    resp = search_tmdb(None)
-                    results = resp.json().get("results", [])
-
-                if results:
-                    logging.info(f"Results found for {title}")
-                    return results[0]["id"]
-
-                else:
-                    logging.error(
-                        f"No results found for '{title}' - The API said '{resp.json().get('errors', 'No error message provided')}' with status code {resp.status_code}"
-                    )
-            else:
-                logging.error(
-                    f"API search failed for '{title}' - The API said '{resp.json().get('errors', 'No error message provided')}' with status code {resp.status_code}"
+                return await client.get(
+                    f"https://api.themoviedb.org/3/search/{type_name}", params=params
                 )
-        return
 
-    def get_details(self, tmdb_id: int, data_type: str) -> dict:
+            async with httpx.AsyncClient() as client:
+                # Attempt to search with year
+                resp = await search_tmdb(year, client)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    results = data.get("results", [])
+                    if not results and year:
+                        # Retry without year if no results are found
+                        logging.error(
+                            f"No results found for '{title}' with year {year}. Retrying without year."
+                        )
+                        resp = await search_tmdb(None, client)
+                        data = resp.json()
+                        results = data.get("results", [])
+
+                    if results:
+                        logging.info(f"Results found for {title}")
+                        return results[0]["id"]
+                    else:
+                        errors = data.get("errors", "No error message provided")
+                        logging.error(
+                            f"No results found for '{title}' - The API said '{errors}' with status code {resp.status_code}"
+                        )
+                else:
+                    data = resp.json()
+                    errors = data.get("errors", "No error message provided")
+                    logging.error(
+                        f"API search failed for '{title}' - The API said '{errors}' with status code {resp.status_code}"
+                    )
+        return None
+
+    async def get_details(self, tmdb_id: int, data_type: str) -> dict:
         """Get the details of a movie/series from the API"""
         type_name = "tv" if data_type == "series" else "movie"
         url = f"https://api.themoviedb.org/3/{type_name}/{tmdb_id}"
@@ -109,14 +115,21 @@ class TMDBClient:
                 "api_key": self.api_key,
                 "language": self.language,
             }
-        response = self.client.get(url, params=params).json()
 
-        if type_name == "tv":
-            self._extract_from_get_details(response, url)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, params=params)
+            if response.status_code == 200:
+                data = response.json()
+                if type_name == "tv":
+                    await self._extract_from_get_details(data, url, client)
+                return data
+            else:
+                logging.error(
+                    f"Failed to fetch details for TMDB ID {tmdb_id}. Status code: {response.status_code}"
+                )
+                return {}
 
-        return response
-
-    def _extract_from_get_details(self, response, url):
+    async def _extract_from_get_details(self, response, url, client):
         seasons = response.get("seasons", [])
         length = len(seasons)
         append_seasons = []
@@ -128,13 +141,19 @@ class TMDBClient:
             append_seasons.append(append_season)
 
         for append_season in append_seasons:
-            tmp_response = self.client.get(
+            tmp_resp = await client.get(
                 url,
                 params={"append_to_response": append_season, "api_key": self.api_key},
-            ).json()
-            season_keys = [k for k in tmp_response.keys() if "season/" in k]
-            for key in season_keys:
-                response[key] = tmp_response[key]
+            )
+            if tmp_resp.status_code == 200:
+                tmp_data = tmp_resp.json()
+                season_keys = [k for k in tmp_data.keys() if "season/" in k]
+                for key in season_keys:
+                    response[key] = tmp_data[key]
+            else:
+                logging.error(
+                    f"Failed to fetch appended seasons for {url}. Status code: {tmp_resp.status_code}"
+                )
 
 
 def clean_file_name(name: str) -> str:
@@ -152,7 +171,6 @@ def clean_file_name(name: str) -> str:
     for reg in reg_exps:
         name = re.sub(reg, "", name)
     return name.strip().rstrip(".-_")
-
 
 
 def get_tmdb():
