@@ -1931,16 +1931,28 @@
               const time_elapsed = Math.floor(
                 Date.now() / 1000 - st.start_time,
               );
-              return `<tr><td class="td-truncate" title="${esc(title)}">${esc(title)}</td><td>DC ${dc}</td><td>${mb_sent} / ${total}</td><td>${speed}</td><td>${time_elapsed}s</td></tr>`;
+              return `<tr><td class="td-truncate" title="${esc(title)}">${esc(title)}</td><td>DC ${dc}</td><td>${mb_sent} / ${total}</td><td>${speed}</td><td>${time_elapsed}s</td><td><button class="btn btn-danger btn-sm btn-icon" title="Cancel Stream" aria-label="Cancel Stream" onclick="cancelStream('${st.id}')">🛑</button></td></tr>`;
             })
             .join("");
           let streamsTable =
             h.active_streams.length === 0
               ? `<div style="padding:20px;text-align:center;color:var(--text-dim)">No active streams.</div>`
-              : `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Node</th><th>Transferred</th><th>Speed</th><th>Time</th></tr></thead><tbody>${streamRows}</tbody></table></div>`;
+              : `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Node</th><th>Transferred</th><th>Speed</th><th>Time</th><th>Actions</th></tr></thead><tbody>${streamRows}</tbody></table></div>`;
           content().innerHTML = `<div class="stat-grid">${statCard("🎬", "Movies", fmtNum(s.movies), "purple")}${statCard("📺", "TV Shows", fmtNum(s.tv_shows), "green")}${statCard("📁", "Raw Files", fmtNum(s.raw_files), "blue")}${statCard("💾", "Total Storage", fmt(s.total_storage_bytes), "yellow")}</div><div class="section-header"><div class="section-title">System Health & Load</div></div><div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${statCard("🤖", "Bots Online", `${h.clients_connected}/${h.clients_total}`, "green")}${statCard("⚡", "Active Streams", h.active_streams.length, "purple")}${statCard("🗂️", "Cached DB Lookups", h.cache_size, "blue")}<button class="stat-card red" aria-label="Purge Cache" style="cursor:pointer;text-align:center;border-color:var(--red);width:100%" onclick="clearSystemCache()"><div style="font-size:28px;margin-bottom:8px">🗑️</div><div style="font-weight:600;font-size:14px;color:var(--red)">Purge Cache</div></button></div><div class="section-header"><div class="section-title">Live Stream Analytics <button class="btn btn-ghost btn-sm btn-icon" style="margin-left:6px" onclick="renderDashboard()">🔄</button></div></div><div style="margin-bottom:32px">${streamsTable}</div><div class="section-header"><div class="section-title">Quick Access</div></div><div class="stat-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">${quickCard("🎬", "Browse Movies", "movies")}${quickCard("📺", "Browse TV Shows", "tv")}${quickCard("📁", "Browse Files", "files")}${quickCard("🔍", "Search", "search")}<button class="stat-card blue" aria-label="Generate Session" style="cursor:pointer;text-align:center;border-color:var(--blue);width:100%" onclick="openSessionModal()"><div style="font-size:28px;margin-bottom:8px">🔑</div><div style="font-weight:600;font-size:14px;color:var(--blue)">Generate Session</div></button></div>`;
         } catch (e) {
           content().innerHTML = errorHTML(e.message);
+        }
+      }
+
+      async function cancelStream(id) {
+        if (!confirm("Are you sure you want to stop this active stream?"))
+          return;
+        try {
+          await api("DELETE", `/admin/stream/${id}`);
+          showToast("Stream cancelled successfully", "success");
+          if (state.tab === "dashboard") renderDashboard();
+        } catch (e) {
+          showToast(e.message, "error");
         }
       }
       async function clearSystemCache() {

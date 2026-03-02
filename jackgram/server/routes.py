@@ -153,12 +153,18 @@ async def media_streamer(request: Request, secure_hash: str, as_download: bool =
             "start_time": time.time(),
             "speed": 0.0,
             "dc_id": dc_id,
+            "cancelled": False,
         }
         last_time = time.time()
         last_bytes = 0
 
         try:
             async for chunk in generator:
+                # Check if the stream was manually cancelled from the admin panel
+                if active_streams.get(stream_id, {}).get("cancelled"):
+                    logging.info(f"Stream {stream_id} cancelled by admin.")
+                    break
+
                 # Check if the client has disconnected
                 if await request.is_disconnected():
                     logging.info(f"Client disconnected, stopping stream {stream_id}")

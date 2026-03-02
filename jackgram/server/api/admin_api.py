@@ -427,6 +427,14 @@ async def get_system_stats():
     }
 
 
+@admin_routes.delete("/stream/{stream_id}")
+async def cancel_stream(stream_id: str):
+    if stream_id in active_streams:
+        active_streams[stream_id]["cancelled"] = True
+        return {"success": True, "message": "Stream cancelled successfully."}
+    raise HTTPException(status_code=404, detail="Stream ID not found.")
+
+
 # ---------------------------------------------------------------------------
 # API Users Management
 # ---------------------------------------------------------------------------
