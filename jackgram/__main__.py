@@ -112,7 +112,7 @@ async def cleanup(web_task):
 
 if __name__ == "__main__":
     try:
-        asyncio.get_event_loop().run_until_complete(start_services())
+        asyncio.run(start_services())
     except KeyboardInterrupt:
         logging.info("Shutting down due to KeyboardInterrupt")
     except Exception as err:
