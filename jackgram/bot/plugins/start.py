@@ -449,10 +449,11 @@ async def count(event):
 )
 @admin_only
 async def save_database(event):
+    status_msg = await event.reply("⏳ **Starting database backup...**")
     try:
         os.makedirs(BACKUP_DIR, exist_ok=True)
     except PermissionError:
-        await event.reply(
+        await status_msg.edit(
             f"❌ Cannot create backup directory `{BACKUP_DIR}` — permission denied.\n"
             "💡 Set `BACKUP_DIR` in config.env to a writable path."
         )
@@ -460,7 +461,13 @@ async def save_database(event):
 
     backup_data = {}
     collections = await db.list_collections()
-    for collection_name in collections:
+    total_collections = len(collections)
+
+    for i, collection_name in enumerate(collections):
+        await status_msg.edit(
+            f"⏳ **Backing up database...**\n"
+            f"Processing collection: `{collection_name}` ({i+1}/{total_collections})"
+        )
         collection = db.db[collection_name]
         cursor = collection.find({})
         data = await cursor.to_list(length=None)
@@ -473,19 +480,52 @@ async def save_database(event):
 
         backup_data[collection_name] = serialized
 
+    await status_msg.edit("💾 **Writing backup file...**")
     backup_file = os.path.join(BACKUP_DIR, "database_backup.json")
     try:
         with open(backup_file, "w") as file:
             json.dump(backup_data, file, indent=4)
     except OSError as e:
-        await event.reply(f"❌ Failed to write backup file: {e}")
+        await status_msg.edit(f"❌ Failed to write backup file: {e}")
         return
 
-    await event.client.send_file(
-        event.chat_id,
-        file=backup_file,
-        caption="✅ Backup completed! Here is your database backup file.",
-    )
+    import time
+    from jackgram.utils.utils import get_readable_size
+
+    await status_msg.edit("📤 **Starting upload to Telegram...**")
+
+    last_edit = time.time()
+
+    async def upload_progress(current, total):
+        nonlocal last_edit
+        now = time.time()
+        if now - last_edit >= 2.0 or current == total:
+            pct = min(int(current / total * 100), 100) if total else 0
+            bar_filled = pct // 5
+            bar = "█" * bar_filled + "░" * (20 - bar_filled)
+
+            curr_str = get_readable_size(current)
+            total_str = get_readable_size(total)
+
+            try:
+                await status_msg.edit(
+                    f"📤 **Uploading backup file to Telegram...**\n\n"
+                    f"`{bar}` **{pct}%**\n"
+                    f"📦 {curr_str} / {total_str}"
+                )
+                last_edit = now
+            except Exception:
+                pass
+
+    try:
+        await event.client.send_file(
+            event.chat_id,
+            file=backup_file,
+            caption="✅ **Backup completed!**\n\nAll collections and fields (including new poster data) have been exported.",
+            progress_callback=upload_progress,
+        )
+    finally:
+        await status_msg.delete()
 
 
 @StreamBot.on(
