@@ -337,13 +337,33 @@ class ParallelTransferrer:
         """Clean up all sender connections gracefully."""
         if self.senders:
             # Use return_exceptions=True to prevent one failed disconnect from blocking others
-            await asyncio.gather(
-                *[sender.disconnect() for sender in self.senders],
-                return_exceptions=True,
-            )
-            # Yield to the event loop so cancelled internal tasks can finalize
-            # before the senders are garbage-collected
-            await asyncio.sleep(0)
+            tasks = [
+                asyncio.create_task(sender.disconnect()) for sender in self.senders
+            ]
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Explicitly wait for Telethon's internal tasks to finish before removing references
+            # to prevent "Task was destroyed but it is pending" errors during GC.
+            tasks_to_wait = []
+            for s in self.senders:
+                for obj in (
+                    s.sender,
+                    getattr(s.sender, "_connection", None),
+                    getattr(s.sender, "connection", None),
+                ):
+                    if obj is None:
+                        continue
+                    for attr in ("_send_task", "_recv_task"):
+                        t = getattr(obj, attr, None)
+                        if t and not t.done():
+                            tasks_to_wait.append(t)
+
+            if tasks_to_wait:
+                try:
+                    await asyncio.wait(tasks_to_wait, timeout=2.0)
+                except Exception:
+                    pass
+
             self.senders = None
 
     @staticmethod

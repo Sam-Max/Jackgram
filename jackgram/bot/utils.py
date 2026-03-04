@@ -44,9 +44,8 @@ async def process_index_queue():
     """Background worker to process individual files added to the queue."""
     logging.info("Async Indexing Queue worker started.")
     while True:
+        message = await index_queue.get()
         try:
-            message = await index_queue.get()
-
             title: str = get_file_title(message)
             filename: str = format_filename(title)
 

@@ -24,6 +24,7 @@ from jackgram.utils.telegram_stream import (
 )
 
 active_streams: Dict[str, Dict[str, Any]] = {}
+background_tasks = set()
 
 from telethon.errors import (
     FloodWaitError,
@@ -216,10 +217,17 @@ async def media_streamer(request: Request, secure_hash: str, as_download: bool =
                     await watcher_task
                 except (asyncio.CancelledError, Exception):
                     pass
+                try:
+                    await generator_body.aclose()
+                except Exception:
+                    pass
                 await transferrer._cleanup()
                 logging.debug(f"Stream {stream_id}: MTProto connections cleaned up")
 
-            asyncio.ensure_future(_do_cleanup())
+            task = asyncio.create_task(_do_cleanup())
+            background_tasks.add(task)
+            task.add_done_callback(background_tasks.discard)
+
             active_streams.pop(stream_id, None)
             logging.debug(f"Stream {stream_id} removed from active_streams")
 
