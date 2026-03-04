@@ -54,3 +54,8 @@ if os.path.isdir(_web_dir):
 @app.get("/")
 async def root_redirect():
     return RedirectResponse(url="/web/index.html")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return RedirectResponse(url="/web/favicon.svg")
