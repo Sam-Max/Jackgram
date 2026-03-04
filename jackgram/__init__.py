@@ -7,6 +7,7 @@ from jackgram.bot.bot import SECRET_KEY
 from jackgram.server.routes import routes
 from jackgram.server.api.bot_api import stream_routes, search_routes
 from jackgram.server.api.admin_api import admin_routes
+from jackgram.server.api.stremio_api import stremio_routes
 from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 import jwt
@@ -14,8 +15,10 @@ import jwt
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path == "/admin/login" or not request.url.path.startswith(
-            "/admin/"
+        if (
+            request.url.path == "/admin/login"
+            or not request.url.path.startswith("/admin/")
+            or request.url.path.startswith("/stremio/")
         ):
             return await call_next(request)
 
@@ -43,6 +46,7 @@ app.include_router(routes)
 app.include_router(stream_routes)
 app.include_router(search_routes)
 app.include_router(admin_routes)
+app.include_router(stremio_routes)
 app.add_middleware(AuthMiddleware)
 
 # Serve admin web dashboard

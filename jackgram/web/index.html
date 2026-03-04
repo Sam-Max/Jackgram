@@ -1420,10 +1420,10 @@
           <button
             class="nav-item"
             style="width: calc(100% - 20px); text-align: left"
-            data-tab="search"
-            onclick="switchTab('search')"
+            data-tab="stremio"
+            onclick="switchTab('stremio')"
           >
-            <span class="nav-icon">🔍</span><span>Search</span>
+            <span class="nav-icon">📺</span><span>Stremio</span>
           </button>
         </nav>
         <div class="sidebar-spacer"></div>
@@ -1895,6 +1895,7 @@
           files: "Raw Files",
           users: "API Users",
           search: "Search",
+          stremio: "Stremio",
         };
         $("page-title").textContent = t[tab] || tab;
         render();
@@ -1907,6 +1908,7 @@
           files: renderFiles,
           users: renderUsers,
           search: renderSearch,
+          stremio: renderStremio,
         })[state.tab]();
       }
 
@@ -2733,6 +2735,64 @@
           renderUsers();
         } catch (e) {
           showToast(e.message, "error");
+        }
+      }
+
+      // ── Stremio ─────────────────────────────────────────────────────
+      async function renderStremio() {
+        content().innerHTML = loadingHTML();
+        try {
+          const d = await api("GET", "/admin/api-users");
+          const users = d.results || [];
+          const baseUrl = window.location.origin;
+
+          if (users.length === 0) {
+            content().innerHTML = `
+              <div class="section-header"><div class="section-title">Stremio Addon</div></div>
+              ${emptyState("📺", "No API tokens found. Create one in the API Users tab first.")}
+            `;
+            return;
+          }
+
+          const rows = users
+            .map((u) => {
+              const manifestUrl = `${baseUrl}/stremio/${u.token}/manifest.json`;
+              return `
+              <tr>
+                <td><strong>${esc(u.name)}</strong></td>
+                <td class="td-mono" style="word-break:break-all;max-width:400px">${esc(manifestUrl)}</td>
+                <td>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn btn-primary btn-sm" onclick="copyText('${manifestUrl}',this)" title="Copy URL">📋 Copy</button>
+                    <a href="stremio://${manifestUrl.replace(/^https?:\/\//, "")}" class="btn btn-ghost btn-sm" title="Open in Stremio">🚀 Install</a>
+                  </div>
+                </td>
+              </tr>`;
+            })
+            .join("");
+
+          content().innerHTML = `
+            <div class="section-header">
+              <div class="section-title">Stremio Addon  <span style="color:var(--text-dim);font-size:13px;font-weight:400">(${users.length} tokens)</span></div>
+            </div>
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px">
+              <p style="margin-bottom:8px;font-weight:600">📡 How to connect Stremio</p>
+              <ol style="color:var(--text-dim);font-size:13px;line-height:1.8;padding-left:20px">
+                <li>Copy your personal manifest URL from the table below.</li>
+                <li>Open <strong>Stremio → Addons → Community Addons</strong>.</li>
+                <li>Paste the URL in the search bar and press Enter.</li>
+                <li>Click <strong>Install</strong> — your Jackgram library will appear in Discover.</li>
+              </ol>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>User</th><th>Manifest URL</th><th>Actions</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          `;
+        } catch (e) {
+          content().innerHTML = errorHTML(e.message);
         }
       }
 
