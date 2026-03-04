@@ -103,9 +103,9 @@ WORKERS = int(getenv("WORKERS", "10"))
 # WebServer
 PORT = int(getenv("PORT", 5000))
 BASE_URL = getenv("BASE_URL")
-if BASE_URL:
-    BASE_URL = f"{BASE_URL}:{PORT}"
-else:
+
+BASE_URL = f"{BASE_URL}:{PORT}"
+if not BASE_URL:
     BASE_URL = f"http://127.0.0.1:{PORT}"
 
 BIND_ADDRESS = getenv("BIND_ADDRESS", "0.0.0.0")

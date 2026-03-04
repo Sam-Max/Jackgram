@@ -43,7 +43,7 @@ async def get_manifest(token: str):
         "version": "1.0.0",
         "name": "Jackgram",
         "description": "Stream your Jackgram indexed media directly in Stremio.",
-        "logo": "https://telegram.org/img/t_logo.png",
+        "logo": f"{BASE_URL}/web/logo.png",
         "resources": ["catalog", "meta", "stream"],
         "types": ["movie", "series"],
         "catalogs": [
