@@ -142,6 +142,21 @@ async def media_streamer(request: Request, secure_hash: str, as_download: bool =
         await multi_session_manager._resolve_file_location(ref, file_size)
     )
 
+    # Cancel event: set when client disconnects so the download engine aborts fast
+    cancel_event = asyncio.Event()
+
+    async def _disconnect_watcher():
+        """Poll for client disconnect and signal the download to abort."""
+        try:
+            while not cancel_event.is_set():
+                if await request.is_disconnected():
+                    logging.debug("Client disconnected, setting cancel_event")
+                    cancel_event.set()
+                    return
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            pass
+
     async def _stream_tracker(
         stream_id: str, filename: str, file_size: int, generator, dc_id: int
     ):
@@ -158,17 +173,22 @@ async def media_streamer(request: Request, secure_hash: str, as_download: bool =
         last_time = time.time()
         last_bytes = 0
 
+        # Start disconnect watcher in the background
+        watcher_task = asyncio.ensure_future(_disconnect_watcher())
+
         try:
             async for chunk in generator:
                 # Check if the stream was manually cancelled from the admin panel
                 if active_streams.get(stream_id, {}).get("cancelled"):
                     logging.info(f"Stream {stream_id} cancelled by admin.")
+                    cancel_event.set()
                     break
 
-                # Check if the client has disconnected
-                if await request.is_disconnected():
+                # Check if the client has disconnected (fast path via cancel_event)
+                if cancel_event.is_set():
                     logging.info(f"Client disconnected, stopping stream {stream_id}")
                     break
+
                 active_streams[stream_id]["bytes_sent"] += len(chunk)
                 now = time.time()
                 elapsed = now - last_time
@@ -183,6 +203,23 @@ async def media_streamer(request: Request, secure_hash: str, as_download: bool =
         except (Exception, asyncio.CancelledError) as e:
             logging.info(f"Stream {stream_id} ended: {type(e).__name__}")
         finally:
+            # Signal cancellation and stop the disconnect watcher
+            cancel_event.set()
+            watcher_task.cancel()
+
+            # Schedule cleanup as a background task — we cannot reliably
+            # `await` inside an async generator's `finally` block when
+            # Python is finalizing it via GeneratorExit.  A background
+            # task runs outside that constrained context.
+            async def _do_cleanup():
+                try:
+                    await watcher_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+                await transferrer._cleanup()
+                logging.debug(f"Stream {stream_id}: MTProto connections cleaned up")
+
+            asyncio.ensure_future(_do_cleanup())
             active_streams.pop(stream_id, None)
             logging.debug(f"Stream {stream_id} removed from active_streams")
 
@@ -193,6 +230,7 @@ async def media_streamer(request: Request, secure_hash: str, as_download: bool =
         file_size=file_size,
         offset=from_bytes,
         limit=req_length,
+        cancel_event=cancel_event,
     )
 
     stream_id = str(uuid.uuid4())

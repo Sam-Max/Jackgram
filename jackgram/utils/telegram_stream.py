@@ -295,9 +295,18 @@ class DownloadSender:
         return result.bytes
 
     async def disconnect(self) -> None:
-        """Disconnect this sender gracefully."""
+        """Disconnect this sender gracefully, awaiting internal task finalization."""
         try:
             await self.sender.disconnect()
+            # Wait for Telethon's internal _disconnected future to resolve,
+            # ensuring _send_loop/_recv_loop tasks are fully cancelled.
+            if hasattr(self.sender, "_disconnected") and self.sender._disconnected:
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(self.sender._disconnected), timeout=2.0
+                    )
+                except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+                    pass
         except Exception:
             # Ignore errors during disconnect - connection may already be closed
             pass
@@ -332,6 +341,9 @@ class ParallelTransferrer:
                 *[sender.disconnect() for sender in self.senders],
                 return_exceptions=True,
             )
+            # Yield to the event loop so cancelled internal tasks can finalize
+            # before the senders are garbage-collected
+            await asyncio.sleep(0)
             self.senders = None
 
     @staticmethod
@@ -462,6 +474,7 @@ class ParallelTransferrer:
         limit: Optional[int] = None,
         part_size_kb: Optional[float] = None,
         connection_count: Optional[int] = None,
+        cancel_event: Optional[asyncio.Event] = None,
     ) -> AsyncGenerator[bytes, None]:
         """
         Download file in parallel chunks.
@@ -473,6 +486,7 @@ class ParallelTransferrer:
             limit: Number of bytes to download (None for entire file)
             part_size_kb: Chunk size in KB (auto-calculated if None)
             connection_count: Number of parallel connections (auto-calculated if None)
+            cancel_event: Optional event that, when set, aborts the download immediately
 
         Yields:
             Chunks of file data
@@ -483,6 +497,9 @@ class ParallelTransferrer:
 
         # Clamp connection count to configured max
         max_connections = min(WORKERS, 20)
+        # For seek requests (offset > 0), use fewer connections for faster startup
+        if offset > 0 and connection_count is None:
+            max_connections = min(max_connections, 4)
         connection_count = connection_count or self._get_connection_count(
             limit, max_count=max_connections
         )
@@ -506,14 +523,22 @@ class ParallelTransferrer:
             connection_count, file, part_count, part_size, base_offset=aligned_offset
         )
 
-        try:
-            part = 0
-            bytes_yielded = 0
-            while part < part_count and bytes_yielded < limit:
-                tasks = [
-                    self.loop.create_task(sender.next()) for sender in self.senders
-                ]
+        part = 0
+        bytes_yielded = 0
+        while part < part_count and bytes_yielded < limit:
+            # Check cancellation before starting a new batch
+            if cancel_event and cancel_event.is_set():
+                logger.debug("Download cancelled by cancel_event before batch")
+                break
+
+            tasks = [asyncio.ensure_future(sender.next()) for sender in self.senders]
+            try:
                 for task in tasks:
+                    # Check cancellation between awaits
+                    if cancel_event and cancel_event.is_set():
+                        logger.debug("Download cancelled by cancel_event mid-batch")
+                        break
+
                     data = await task
                     if not data:
                         break
@@ -538,10 +563,16 @@ class ParallelTransferrer:
 
                     if bytes_yielded >= limit:
                         break
+            finally:
+                # Cancel any tasks we didn't await (e.g. on break/disconnect)
+                pending = [t for t in tasks if not t.done()]
+                if pending:
+                    logger.debug(f"Cancelling {len(pending)} pending download tasks")
+                    for t in pending:
+                        t.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
 
-            logger.debug("Parallel download finished, cleaning up connections")
-        finally:
-            await self._cleanup()
+        logger.debug("Parallel download finished")
 
 
 class _SingleSenderPool:
