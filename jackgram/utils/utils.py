@@ -26,7 +26,9 @@ def format_filename(title: str) -> str:
 
 
 async def extract_file_info(message, filename: str) -> Dict[str, Union[str, int]]:
-    name = getattr(message.file, "name", "unknown")
+    name = getattr(message.file, "name", None)
+    if not name:
+        name = filename if filename else "Unknown Media"
     size = getattr(message.file, "size", 0)
     mime_type = getattr(message.file, "mime_type", "unknown")
 
@@ -287,7 +289,10 @@ def extract_media_file_raw(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def extract_show_info(
-    data: Dict, season_num: int, episode_num: int, tmdb_id: int
+    data: Dict,
+    season_num: int,
+    episode_num: int,
+    tmdb_id: int,
 ) -> List[Dict]:
     show_info = []
     for season in data.get("seasons", []):

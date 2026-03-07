@@ -7,6 +7,10 @@ from telethon import events, Button
 from telethon.tl.types import Message
 
 from jackgram.bot.bot import StreamBot, LOGS_CHANNELS
+from jackgram.bot.conversation_state import (
+    mark_conversation_active,
+    mark_conversation_inactive,
+)
 from jackgram.bot.utils import send_message
 from jackgram.utils.utils import (
     extract_file_info,
@@ -50,8 +54,9 @@ async def wizard_start(event: Message):
     imdb_match = re.search(r"tt\d{7,8}", caption_text)
     detected_imdb_id = imdb_match.group(0) if imdb_match else None
 
-    async with StreamBot.conversation(chat_id, timeout=120) as conv:
-        try:
+    mark_conversation_active(sender_id)
+    try:
+        async with StreamBot.conversation(chat_id, timeout=120) as conv:
             # Step 1: Ask for media type
             prompt_text = "🧙‍♂️ **User Contribution Wizard**\n\nI detected a media file."
             if detected_imdb_id:
@@ -238,10 +243,10 @@ async def wizard_start(event: Message):
                 "🎉 **Successfully Indexed!**\n\nThe media has been validated by you and perfectly added to the database."
             )
 
-        except asyncio.TimeoutError:
-            await conv.send_message(
-                "⏳ Wizard timed out. Please send the file again to restart."
-            )
-        except Exception as e:
-            logging.error(f"Wizard error: {e}")
-            await conv.send_message("❌ An unexpected error occurred while processing.")
+    except asyncio.TimeoutError:
+        await event.reply("⏳ Wizard timed out. Please send the file again to restart.")
+    except Exception as e:
+        logging.error(f"Wizard error: {e}")
+        await event.reply("❌ An unexpected error occurred while processing.")
+    finally:
+        mark_conversation_inactive(sender_id)

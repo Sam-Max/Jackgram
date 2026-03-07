@@ -4,6 +4,7 @@ import logging
 import json
 import os
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 import jwt
 
 from bson.objectid import ObjectId
@@ -13,17 +14,522 @@ from telethon.errors import FloodWaitError
 
 from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot, LOGS_CHANNELS
 from jackgram.bot.auth import admin_only
+from jackgram.bot.conversation_state import (
+    is_conversation_active,
+    mark_conversation_active,
+    mark_conversation_inactive,
+)
+from jackgram.bot.search_sessions import SearchSessionStore
 from jackgram.bot.utils import index_channel
 from jackgram.utils.telegram_stream import multi_session_manager
 from jackgram.utils.utils import (
-    extract_media_file_raw,
-    extract_movie_info_raw,
-    extract_show_info_raw,
+    get_readable_size,
 )
 
 from jackgram import __version__
 
 db = get_db()
+
+SEARCH_RESULTS_PER_PAGE = 6
+SEARCH_ITEMS_PER_PAGE = 8
+SEARCH_FETCH_PAGE_SIZE = 50
+SEARCH_MAX_FETCH_PAGES = 4
+
+search_sessions = SearchSessionStore(ttl_seconds=900)
+
+
+def _truncate_text(text: str, max_len: int = 48) -> str:
+    cleaned = " ".join((text or "").split())
+    if len(cleaned) <= max_len:
+        return cleaned
+    return f"{cleaned[: max_len - 3]}..."
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_callback_int(value: Optional[str]) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _chat_id_candidates(chat_id: int) -> List[int]:
+    candidates: List[int] = []
+    if chat_id:
+        candidates.append(chat_id)
+
+    raw = str(chat_id)
+    if raw.startswith("-100"):
+        stripped = _safe_int(raw[4:], 0)
+        if stripped:
+            candidates.append(stripped)
+    elif chat_id > 0:
+        maybe_channel = _safe_int(f"-100{chat_id}", 0)
+        if maybe_channel:
+            candidates.append(maybe_channel)
+
+    unique: List[int] = []
+    seen = set()
+    for value in candidates:
+        if value in seen:
+            continue
+        seen.add(value)
+        unique.append(value)
+    return unique
+
+
+async def _resolve_input_entity(client, chat_id: int):
+    for candidate in _chat_id_candidates(chat_id):
+        try:
+            return await client.get_input_entity(candidate)
+        except Exception:
+            continue
+
+    try:
+        await client.get_dialogs(limit=200)
+    except Exception:
+        pass
+
+    for candidate in _chat_id_candidates(chat_id):
+        try:
+            return await client.get_input_entity(candidate)
+        except Exception:
+            continue
+
+    return None
+
+
+async def _fetch_source_message(client, chat_id: int, message_id: int):
+    for candidate in _chat_id_candidates(chat_id):
+        source_entity = await _resolve_input_entity(client, candidate)
+        if source_entity is None:
+            continue
+        try:
+            src_messages = await asyncio.wait_for(
+                client.get_messages(source_entity, ids=[message_id]),
+                timeout=15,
+            )
+        except Exception:
+            continue
+        src_message = src_messages[0] if src_messages else None
+        if src_message:
+            return src_message, source_entity
+    return None, None
+
+
+def _paginate_items(items: List[Dict[str, Any]], page: int, per_page: int) -> Tuple[List[Dict[str, Any]], int, int]:
+    if not items:
+        return [], 1, 0
+    total_pages = max((len(items) + per_page - 1) // per_page, 1)
+    page = max(1, min(page, total_pages))
+    start_idx = (page - 1) * per_page
+    return items[start_idx : start_idx + per_page], total_pages, start_idx
+
+
+def _get_result_kind(item: Dict[str, Any]) -> str:
+    item_type = item.get("type")
+    if item_type == "movie":
+        return "movie"
+    if item_type == "tv":
+        return "tv"
+    return "raw"
+
+
+def _extract_year(item: Dict[str, Any]) -> str:
+    date_value = item.get("release_date") or item.get("first_air_date") or ""
+    if isinstance(date_value, str) and "-" in date_value:
+        return date_value.split("-")[0]
+    return str(date_value) if date_value else ""
+
+
+def _build_result_label(item: Dict[str, Any]) -> str:
+    kind = _get_result_kind(item)
+    if kind == "movie":
+        title = item.get("title") or "Unknown movie"
+        year = _extract_year(item)
+        suffix = f" ({year})" if year else ""
+        return _truncate_text(f"🎬 {title}{suffix}")
+    if kind == "tv":
+        title = item.get("title") or item.get("name") or "Unknown series"
+        year = _extract_year(item)
+        suffix = f" ({year})" if year else ""
+        return _truncate_text(f"📺 {title}{suffix}")
+    file_name = item.get("file_name") or "Unknown file"
+    return _truncate_text(f"📁 {file_name}")
+
+
+def _build_quality_label(file_data: Dict[str, Any]) -> str:
+    quality = file_data.get("quality") or "Unknown"
+    size = get_readable_size(file_data.get("file_size", 0))
+    codec = file_data.get("video_codec") or file_data.get("source") or ""
+    if codec:
+        return _truncate_text(f"{quality} • {size} • {codec}")
+    return _truncate_text(f"{quality} • {size}")
+
+
+def _callback_data(session_id: str, action: str, value: Optional[Any] = None) -> bytes:
+    payload = f"sr:{session_id}:{action}"
+    if value is not None:
+        payload = f"{payload}:{value}"
+    return payload.encode()
+
+
+def _parse_callback_data(data: bytes) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    try:
+        raw = data.decode()
+    except Exception:
+        return None, None, None
+    parts = raw.split(":")
+    if len(parts) < 3 or parts[0] != "sr":
+        return None, None, None
+    session_id = parts[1]
+    action = parts[2]
+    value = parts[3] if len(parts) > 3 else None
+    return session_id, action, value
+
+
+def _dedupe_search_results(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    unique_items: List[Dict[str, Any]] = []
+    seen = set()
+    for item in items:
+        kind = _get_result_kind(item)
+        if kind in {"movie", "tv"}:
+            unique_key = f"{kind}:{item.get('tmdb_id')}"
+        else:
+            unique_key = f"raw:{item.get('hash')}"
+        if unique_key in seen:
+            continue
+        seen.add(unique_key)
+        unique_items.append(item)
+    return unique_items
+
+
+async def _fetch_search_results(search_query: str) -> List[Dict[str, Any]]:
+    combined: List[Dict[str, Any]] = []
+    for page in range(1, SEARCH_MAX_FETCH_PAGES + 1):
+        page_results, _ = await db.search_tmdb(
+            search_query,
+            page=page,
+            per_page=SEARCH_FETCH_PAGE_SIZE,
+        )
+        if not page_results:
+            break
+        combined.extend(page_results)
+
+    return _dedupe_search_results(combined)
+
+
+def _get_selected_result(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    idx = session.get("selected_result_idx")
+    results = session.get("results", [])
+    if idx is None or idx < 0 or idx >= len(results):
+        return None
+    return results[idx]
+
+
+def _get_series_seasons(series_item: Dict[str, Any]) -> List[Dict[str, Any]]:
+    seasons = []
+    for season in series_item.get("seasons", []):
+        episodes = [
+            ep
+            for ep in season.get("episodes", [])
+            if ep.get("file_info") and len(ep.get("file_info", [])) > 0
+        ]
+        if not episodes:
+            continue
+        seasons.append(
+            {
+                "season_number": season.get("season_number"),
+                "episodes": episodes,
+            }
+        )
+    seasons.sort(key=lambda s: s.get("season_number") or 0)
+    return seasons
+
+
+def _get_season_episodes(series_item: Dict[str, Any], season_number: int) -> List[Dict[str, Any]]:
+    for season in _get_series_seasons(series_item):
+        if season.get("season_number") != season_number:
+            continue
+        episodes = season.get("episodes", [])
+        episodes.sort(key=lambda ep: ep.get("episode_number") or 0)
+        return episodes
+    return []
+
+
+def _normalize_quality_choice(file_info: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "chat_id": file_info.get("chat_id"),
+        "message_id": file_info.get("message_id"),
+        "file_name": file_info.get("file_name") or "Unknown file",
+        "file_size": file_info.get("file_size") or 0,
+        "quality": file_info.get("quality") or "Unknown",
+        "video_codec": file_info.get("video_codec"),
+        "source": file_info.get("source"),
+    }
+
+
+def _get_quality_choices(session: Dict[str, Any]) -> List[Dict[str, Any]]:
+    selected = _get_selected_result(session)
+    if not selected:
+        return []
+
+    kind = _get_result_kind(selected)
+    if kind == "movie":
+        return [
+            _normalize_quality_choice(file_info)
+            for file_info in selected.get("file_info", [])
+            if file_info.get("chat_id") and file_info.get("message_id")
+        ]
+
+    if kind == "raw":
+        if selected.get("chat_id") and selected.get("message_id"):
+            return [_normalize_quality_choice(selected)]
+        return []
+
+    season_number = session.get("selected_season")
+    episode_idx = session.get("selected_episode_idx")
+    if season_number is None or episode_idx is None:
+        return []
+
+    episodes = _get_season_episodes(selected, season_number)
+    if episode_idx < 0 or episode_idx >= len(episodes):
+        return []
+
+    chosen_episode = episodes[episode_idx]
+    return [
+        _normalize_quality_choice(file_info)
+        for file_info in chosen_episode.get("file_info", [])
+        if file_info.get("chat_id") and file_info.get("message_id")
+    ]
+
+
+def _build_page_row(
+    session_id: str,
+    action: str,
+    page: int,
+    total_pages: int,
+) -> List[Button]:
+    nav_row: List[Button] = []
+    if total_pages <= 1:
+        return nav_row
+    if page > 1:
+        nav_row.append(Button.inline("⬅️ Prev", _callback_data(session_id, action, page - 1)))
+    if page < total_pages:
+        nav_row.append(Button.inline("Next ➡️", _callback_data(session_id, action, page + 1)))
+    return nav_row
+
+
+def _render_results_view(session: Dict[str, Any], page: int) -> Tuple[str, List[List[Button]]]:
+    results = session.get("results", [])
+    page_items, total_pages, start_idx = _paginate_items(
+        results,
+        page,
+        SEARCH_RESULTS_PER_PAGE,
+    )
+
+    text = (
+        f"🔍 Results for: **{session.get('query', '')}**\n"
+        f"Page `{max(1, min(page, total_pages))}/{total_pages}` • Total: **{len(results)}**\n\n"
+        "Select a result:"
+    )
+
+    buttons: List[List[Button]] = []
+    for idx, item in enumerate(page_items):
+        global_idx = start_idx + idx
+        buttons.append(
+            [
+                Button.inline(
+                    _build_result_label(item),
+                    _callback_data(session["session_id"], "ri", global_idx),
+                )
+            ]
+        )
+
+    nav_row = _build_page_row(session["session_id"], "rp", page, total_pages)
+    if nav_row:
+        buttons.append(nav_row)
+    buttons.append([Button.inline("❌ Close", _callback_data(session["session_id"], "close"))])
+    return text, buttons
+
+
+def _render_seasons_view(session: Dict[str, Any], page: int) -> Tuple[str, List[List[Button]]]:
+    selected = _get_selected_result(session)
+    if not selected or _get_result_kind(selected) != "tv":
+        return "❌ Series not found in the active session.", []
+
+    seasons = _get_series_seasons(selected)
+    page_items, total_pages, start_idx = _paginate_items(
+        seasons,
+        page,
+        SEARCH_ITEMS_PER_PAGE,
+    )
+
+    title = selected.get("title") or selected.get("name") or "Series"
+    text = (
+        f"📺 **{_truncate_text(title, 60)}**\n"
+        f"Seasons • Page `{max(1, min(page, total_pages))}/{total_pages}`\n\n"
+        "Choose a season:"
+    )
+
+    buttons: List[List[Button]] = []
+    for idx, season in enumerate(page_items):
+        global_idx = start_idx + idx
+        season_number = season.get("season_number")
+        episode_count = len(season.get("episodes", []))
+        label = f"Season {season_number} ({episode_count} eps)"
+        buttons.append(
+            [
+                Button.inline(
+                    _truncate_text(label),
+                    _callback_data(session["session_id"], "si", global_idx),
+                )
+            ]
+        )
+
+    nav_row = _build_page_row(session["session_id"], "sp", page, total_pages)
+    if nav_row:
+        buttons.append(nav_row)
+    buttons.append([Button.inline("⬅️ Back", _callback_data(session["session_id"], "back", "r"))])
+    buttons.append([Button.inline("❌ Close", _callback_data(session["session_id"], "close"))])
+    return text, buttons
+
+
+def _render_episodes_view(session: Dict[str, Any], page: int) -> Tuple[str, List[List[Button]]]:
+    selected = _get_selected_result(session)
+    if not selected or _get_result_kind(selected) != "tv":
+        return "❌ Series not found in the active session.", []
+
+    season_number = session.get("selected_season")
+    if season_number is None:
+        return "❌ Season not selected.", []
+
+    episodes = _get_season_episodes(selected, season_number)
+    page_items, total_pages, start_idx = _paginate_items(
+        episodes,
+        page,
+        SEARCH_ITEMS_PER_PAGE,
+    )
+
+    title = selected.get("title") or selected.get("name") or "Series"
+    text = (
+        f"📺 **{_truncate_text(title, 60)}**\n"
+        f"Season **{season_number}** • Page `{max(1, min(page, total_pages))}/{total_pages}`\n\n"
+        "Choose an episode:"
+    )
+
+    buttons: List[List[Button]] = []
+    for idx, episode in enumerate(page_items):
+        global_idx = start_idx + idx
+        episode_number = episode.get("episode_number")
+        episode_number_int = _safe_int(episode_number)
+        episode_title = episode.get("title") or f"Episode {episode_number}"
+        files_count = len(episode.get("file_info", []))
+        label = f"E{episode_number_int:02d} • {episode_title} ({files_count} files)"
+        buttons.append(
+            [
+                Button.inline(
+                    _truncate_text(label),
+                    _callback_data(session["session_id"], "ei", global_idx),
+                )
+            ]
+        )
+
+    nav_row = _build_page_row(session["session_id"], "ep", page, total_pages)
+    if nav_row:
+        buttons.append(nav_row)
+    buttons.append([Button.inline("⬅️ Back", _callback_data(session["session_id"], "back", "s"))])
+    buttons.append([Button.inline("❌ Close", _callback_data(session["session_id"], "close"))])
+    return text, buttons
+
+
+def _render_quality_view(session: Dict[str, Any], page: int) -> Tuple[str, List[List[Button]]]:
+    selected = _get_selected_result(session)
+    if not selected:
+        return "❌ Selected item not found.", []
+
+    kind = _get_result_kind(selected)
+    choices = _get_quality_choices(session)
+    page_items, total_pages, start_idx = _paginate_items(
+        choices,
+        page,
+        SEARCH_ITEMS_PER_PAGE,
+    )
+
+    if kind == "movie":
+        title = selected.get("title") or "Movie"
+        header = f"🎬 **{_truncate_text(title, 60)}**"
+        back_target = "r"
+    elif kind == "tv":
+        title = selected.get("title") or selected.get("name") or "Series"
+        season_number = session.get("selected_season")
+        episode_idx = session.get("selected_episode_idx")
+        episodes = _get_season_episodes(selected, season_number)
+        episode_number = "?"
+        if episode_idx is not None and 0 <= episode_idx < len(episodes):
+            episode_number = episodes[episode_idx].get("episode_number", "?")
+        season_number_int = _safe_int(season_number)
+        episode_number_int = _safe_int(episode_number)
+        header = f"📺 **{_truncate_text(title, 60)}** • S{season_number_int:02d}E{episode_number_int:02d}"
+        back_target = "e"
+    else:
+        file_name = selected.get("file_name") or "Raw file"
+        header = f"📁 **{_truncate_text(file_name, 60)}**"
+        back_target = "r"
+
+    text = (
+        f"{header}\n"
+        f"Files • Page `{max(1, min(page, total_pages))}/{total_pages}`\n\n"
+        "Choose quality/file:"
+    )
+
+    buttons: List[List[Button]] = []
+    for idx, choice in enumerate(page_items):
+        global_idx = start_idx + idx
+        buttons.append(
+            [
+                Button.inline(
+                    _build_quality_label(choice),
+                    _callback_data(session["session_id"], "qi", global_idx),
+                )
+            ]
+        )
+
+    nav_row = _build_page_row(session["session_id"], "qp", page, total_pages)
+    if nav_row:
+        buttons.append(nav_row)
+    buttons.append([Button.inline("⬅️ Back", _callback_data(session["session_id"], "back", back_target))])
+    buttons.append([Button.inline("❌ Close", _callback_data(session["session_id"], "close"))])
+    return text, buttons
+
+
+async def _start_search_flow(event, search_query: str) -> None:
+    query = (search_query or "").strip()
+    if not query:
+        await event.reply("Use /search <query>")
+        return
+
+    results = await _fetch_search_results(query)
+    if not results:
+        await event.reply(f"No results found for \"{query}\".")
+        return
+
+    session_id = search_sessions.create_session(event.sender_id, query, results)
+    session = search_sessions.get_session(session_id)
+    if not session:
+        await event.reply("❌ Failed to create search session. Please try again.")
+        return
+
+    text, buttons = _render_results_view(session, page=1)
+    await event.reply(text, buttons=buttons)
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/start(?: |$)", func=lambda e: e.is_private))
@@ -89,8 +595,9 @@ async def index(event):
     # User friendly: Interactive Wizard
     elif len(args) == 0:
         sender_id = event.sender_id
-        async with StreamBot.conversation(event.chat_id, timeout=300) as conv:
-            try:
+        mark_conversation_active(sender_id)
+        try:
+            async with StreamBot.conversation(event.chat_id, timeout=300) as conv:
                 # Step 1: Chat ID
                 await conv.send_message(
                     "🔍 **Indexing Wizard**\n\nPlease send the **Chat ID** or **Username** of the channel you want to index."
@@ -196,13 +703,15 @@ async def index(event):
                     f"✅ Selected: **{client_type.capitalize()}**\n⏳ Starting index..."
                 )
 
-            except asyncio.TimeoutError:
-                await conv.send_message("⏳ Indexing wizard timed out.")
-                return
-            except Exception as e:
-                logging.error(f"Index wizard error: {e}")
-                await conv.send_message(f"❌ Error: {e}")
-                return
+        except asyncio.TimeoutError:
+            await event.reply("⏳ Indexing wizard timed out.")
+            return
+        except Exception as e:
+            logging.error(f"Index wizard error: {e}")
+            await event.reply(f"❌ Error: {e}")
+            return
+        finally:
+            mark_conversation_inactive(sender_id)
     else:
         await event.reply(
             "🚀 **Quick Indexing**\n\n"
@@ -287,47 +796,293 @@ async def index(event):
 @StreamBot.on(
     events.NewMessage(pattern=r"^/search(?: |$)", func=lambda e: e.is_private)
 )
-@admin_only
 async def search(event):
     if not event.message.text:
         return
     args = event.message.text.split()[1:]
-    if len(args) >= 1:
-        search_query = " ".join(args)
-    else:
+    if not args:
         await event.reply("Use /search <query>")
         return
+    await _start_search_flow(event, " ".join(args))
 
-    results, total = await db.search_tmdb(search_query)
-    if not results:
-        await event.reply("No results found.")
+
+@StreamBot.on(
+    events.NewMessage(
+        func=lambda e: (
+            e.is_private
+            and bool(getattr(e, "raw_text", None))
+            and not e.raw_text.startswith("/")
+            and not e.media
+        )
+    )
+)
+async def search_text_message(event):
+    if is_conversation_active(event.sender_id):
+        return
+    await _start_search_flow(event, event.raw_text)
+
+
+@StreamBot.on(events.CallbackQuery(pattern=b"sr:"))
+async def search_callback(event):
+    session_id, action, value = _parse_callback_data(event.data)
+    if not session_id or not action:
+        await event.answer("Invalid action.", alert=True)
         return
 
-    all_files = []
-    for result in results[:5]:
-        result_type = result.get("type")
-        if result_type == "movie":
-            info = extract_movie_info_raw(result)
-            all_files.extend(info.get("files", []))
-        elif result_type == "tv":
-            info = extract_show_info_raw(result)
-            all_files.extend(info.get("files", []))
-        else:
-            all_files.append(extract_media_file_raw(result))
-
-    if not all_files:
-        await event.reply("No files associated found.")
+    session = search_sessions.touch(session_id)
+    if not session:
+        await event.answer("This search has expired. Send your query again.", alert=True)
         return
 
-    results_list = "\n".join(
-        f"{idx + 1}. [{file.get('title', 'Unknown')}]({file.get('url', '#')})"
-        for idx, file in enumerate(all_files[:20])
-    )
+    if session.get("sender_id") != event.sender_id:
+        await event.answer("These buttons are not for you.", alert=True)
+        return
 
-    await event.reply(
-        f'🔍 Found {total} result(s) for "{search_query}":\n\n{results_list}',
-        link_preview=False,
-    )
+    try:
+        if action == "close":
+            search_sessions.delete_session(session_id)
+            await event.edit("❌ Search closed.", buttons=None)
+            await event.answer()
+            return
+
+        if action == "rp":
+            page = _parse_callback_int(value)
+            if page is None:
+                await event.answer("Invalid page.", alert=True)
+                return
+            session = search_sessions.update_session(session_id, results_page=page)
+            if not session:
+                await event.answer("This search has expired.", alert=True)
+                return
+            text, buttons = _render_results_view(session, page)
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "ri":
+            idx = _parse_callback_int(value)
+            if idx is None:
+                await event.answer("Invalid selection.", alert=True)
+                return
+            results = session.get("results", [])
+            if idx < 0 or idx >= len(results):
+                await event.answer("Invalid selection.", alert=True)
+                return
+            selected_item = results[idx]
+            kind = _get_result_kind(selected_item)
+            session = search_sessions.update_session(
+                session_id,
+                selected_result_idx=idx,
+                selected_season=None,
+                selected_episode_idx=None,
+                seasons_page=1,
+                episodes_page=1,
+                quality_page=1,
+            )
+            if not session:
+                await event.answer("This search has expired.", alert=True)
+                return
+
+            if kind == "tv":
+                text, buttons = _render_seasons_view(session, page=1)
+            else:
+                text, buttons = _render_quality_view(session, page=1)
+
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "sp":
+            page = _parse_callback_int(value)
+            if page is None:
+                await event.answer("Invalid page.", alert=True)
+                return
+            session = search_sessions.update_session(session_id, seasons_page=page)
+            if not session:
+                await event.answer("This search has expired.", alert=True)
+                return
+            text, buttons = _render_seasons_view(session, page)
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "si":
+            idx = _parse_callback_int(value)
+            if idx is None:
+                await event.answer("Invalid season.", alert=True)
+                return
+            selected = _get_selected_result(session)
+            if not selected or _get_result_kind(selected) != "tv":
+                await event.answer("Invalid series selection.", alert=True)
+                return
+            seasons = _get_series_seasons(selected)
+            if idx < 0 or idx >= len(seasons):
+                await event.answer("Invalid season.", alert=True)
+                return
+
+            season_number = seasons[idx].get("season_number")
+            session = search_sessions.update_session(
+                session_id,
+                selected_season=season_number,
+                selected_episode_idx=None,
+                episodes_page=1,
+                quality_page=1,
+            )
+            if not session:
+                await event.answer("This search has expired.", alert=True)
+                return
+            text, buttons = _render_episodes_view(session, page=1)
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "ep":
+            page = _parse_callback_int(value)
+            if page is None:
+                await event.answer("Invalid page.", alert=True)
+                return
+            session = search_sessions.update_session(session_id, episodes_page=page)
+            if not session:
+                await event.answer("This search has expired.", alert=True)
+                return
+            text, buttons = _render_episodes_view(session, page)
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "ei":
+            idx = _parse_callback_int(value)
+            if idx is None:
+                await event.answer("Invalid episode.", alert=True)
+                return
+            selected = _get_selected_result(session)
+            if not selected or _get_result_kind(selected) != "tv":
+                await event.answer("Invalid episode selection.", alert=True)
+                return
+            season_number = session.get("selected_season")
+            episodes = _get_season_episodes(selected, season_number)
+            if idx < 0 or idx >= len(episodes):
+                await event.answer("Invalid episode.", alert=True)
+                return
+
+            session = search_sessions.update_session(
+                session_id,
+                selected_episode_idx=idx,
+                quality_page=1,
+            )
+            if not session:
+                await event.answer("This search has expired.", alert=True)
+                return
+            text, buttons = _render_quality_view(session, page=1)
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "qp":
+            page = _parse_callback_int(value)
+            if page is None:
+                await event.answer("Invalid page.", alert=True)
+                return
+            session = search_sessions.update_session(session_id, quality_page=page)
+            if not session:
+                await event.answer("This search has expired.", alert=True)
+                return
+            text, buttons = _render_quality_view(session, page)
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "qi":
+            idx = _parse_callback_int(value)
+            if idx is None:
+                await event.answer("Invalid file selection.", alert=True)
+                return
+            choices = _get_quality_choices(session)
+            if idx < 0 or idx >= len(choices):
+                await event.answer("Invalid file selection.", alert=True)
+                return
+
+            selected_file = choices[idx]
+            chat_id = _safe_int(selected_file.get("chat_id"), 0)
+            message_id = _safe_int(selected_file.get("message_id"), 0)
+            if not chat_id or not message_id:
+                await event.answer("File source not found.", alert=True)
+                return
+
+            logging.warning(
+                "Starting file send from search callback (sender_id=%s, chat_id=%s, message_id=%s)",
+                event.sender_id,
+                chat_id,
+                message_id,
+            )
+            await event.answer("Preparing file...", alert=False)
+            logging.warning("Fetching source message with bot client")
+            src_message, source_entity = await _fetch_source_message(
+                event.client,
+                chat_id,
+                message_id,
+            )
+
+            if not src_message or source_entity is None:
+                await event.answer(
+                    "Bot cannot access the source channel message. Check bot access to the logs channel.",
+                    alert=True,
+                )
+                return
+
+            target_entity = await event.get_input_chat()
+            forwarded = await event.client.forward_messages(
+                entity=target_entity,
+                messages=[message_id],
+                from_peer=source_entity,
+            )
+            if not forwarded:
+                await event.answer(
+                    "Telegram did not forward this file. Try again.",
+                    alert=True,
+                )
+                return
+
+            logging.info(
+                "Forwarded file via search callback (sender_id=%s, chat_id=%s, message_id=%s)",
+                event.sender_id,
+                chat_id,
+                message_id,
+            )
+            await event.answer("✅ File sent.", alert=False)
+            return
+
+        if action == "back":
+            target = value or "r"
+            if target == "r":
+                page = _safe_int(session.get("results_page", 1), 1)
+                text, buttons = _render_results_view(session, page)
+            elif target == "s":
+                page = _safe_int(session.get("seasons_page", 1), 1)
+                text, buttons = _render_seasons_view(session, page)
+            elif target == "e":
+                page = _safe_int(session.get("episodes_page", 1), 1)
+                text, buttons = _render_episodes_view(session, page)
+            else:
+                await event.answer("Invalid navigation.", alert=True)
+                return
+
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        await event.answer("Unknown action.", alert=True)
+
+    except FloodWaitError as e:
+        await event.answer(f"FloodWait: wait {e.seconds}s.", alert=True)
+    except Exception as e:
+        logging.exception(
+            "Search callback error: %s (sender_id=%s, callback=%s)",
+            e,
+            event.sender_id,
+            event.data,
+        )
+        await event.answer("Error processing this action.", alert=True)
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/del(?: |$)", func=lambda e: e.is_private))
@@ -428,8 +1183,6 @@ async def count(event):
     files = await db.count_media_files()
     total = movies + tv + files
 
-    from jackgram.utils.utils import get_readable_size
-
     total_storage = await db.get_total_storage()
     storage_str = get_readable_size(total_storage)
 
@@ -490,7 +1243,6 @@ async def save_database(event):
         return
 
     import time
-    from jackgram.utils.utils import get_readable_size
 
     await status_msg.edit("📤 **Starting upload to Telegram...**")
 
