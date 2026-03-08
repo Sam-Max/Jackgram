@@ -1388,7 +1388,6 @@ async def delete_channel_callback(event):
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/count(?: |$)", func=lambda e: e.is_private))
-@admin_only
 async def count(event):
     movies = await db.count_movies()
     tv = await db.count_tv()
