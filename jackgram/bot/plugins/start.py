@@ -1035,12 +1035,12 @@ async def search_callback(event):
                 return
 
             target_entity = await event.get_input_chat()
-            forwarded = await event.client.forward_messages(
+            sent_message = await event.client.send_file(
                 entity=target_entity,
-                messages=[message_id],
-                from_peer=source_entity,
+                file=src_message.media,
+                caption=src_message.message or "",
             )
-            if not forwarded:
+            if not sent_message:
                 await event.answer(
                     t("search.telegram_did_not_forward"),
                     alert=True,
@@ -1048,7 +1048,7 @@ async def search_callback(event):
                 return
 
             logging.info(
-                "Forwarded file via search callback (sender_id=%s, chat_id=%s, message_id=%s)",
+                "Sent copied file via search callback (sender_id=%s, chat_id=%s, message_id=%s)",
                 event.sender_id,
                 chat_id,
                 message_id,
