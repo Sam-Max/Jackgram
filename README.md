@@ -90,6 +90,7 @@ Fill your `config.env` with these essential variables. You can get Telegram API 
 | `API_HASH` | Your Telegram API Hash | Required |
 | `BOT_TOKEN` | Telegram Bot Token ([@BotFather](https://t.me/BotFather)) | Required |
 | `TMDB_API` | TMDb API Key | Required |
+| `BOT_LANGUAGE` | Global Telegram bot UI language (`en` or `es`) | `en` |
 | `LOGS_CHANNEL` | Comma-separated channel IDs with optional names (e.g., `-1001:Movies,-1002:Series`) | Required |
 | `BASE_URL` | Public IP/Domain of your server | Required |
 | `DATABASE_URL` | MongoDB connection string | `mongodb://admin:admin@mongo:27017` |
@@ -103,6 +104,18 @@ Fill your `config.env` with these essential variables. You can get Telegram API 
 | `INDEX_ALLOWED_EXTENSIONS`| Comma-separated list of permitted extensions (e.g. `.mkv,.mp4`) | Optional |
 | `ADMIN_IDS` | Comma-separated Telegram User IDs allowed to run bot commands | Default: All (unsecured) |
 | `BACKUP_DIR` | Directory where database backups are stored | `./database` |
+
+---
+
+## 🌍 Bot Localization
+
+The Telegram bot supports a global UI language configured through `config.env`.
+
+- Set `BOT_LANGUAGE="en"` to keep the current English bot text.
+- Set `BOT_LANGUAGE="es"` to show bot messages and button labels in Spanish.
+- English remains the fallback if a translation key is missing.
+
+Implementation notes and maintenance workflow are documented in `docs/bot-localization.md`.
 
 ---
 

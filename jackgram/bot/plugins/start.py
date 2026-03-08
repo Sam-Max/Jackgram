@@ -19,6 +19,7 @@ from jackgram.bot.conversation_state import (
     mark_conversation_active,
     mark_conversation_inactive,
 )
+from jackgram.bot.i18n import t
 from jackgram.bot.search_sessions import SearchSessionStore
 from jackgram.bot.utils import index_channel
 from jackgram.utils.telegram_stream import multi_session_manager
@@ -153,21 +154,21 @@ def _extract_year(item: Dict[str, Any]) -> str:
 def _build_result_label(item: Dict[str, Any]) -> str:
     kind = _get_result_kind(item)
     if kind == "movie":
-        title = item.get("title") or "Unknown movie"
+        title = item.get("title") or t("common.unknown_movie")
         year = _extract_year(item)
         suffix = f" ({year})" if year else ""
         return _truncate_text(f"🎬 {title}{suffix}")
     if kind == "tv":
-        title = item.get("title") or item.get("name") or "Unknown series"
+        title = item.get("title") or item.get("name") or t("common.unknown_series")
         year = _extract_year(item)
         suffix = f" ({year})" if year else ""
         return _truncate_text(f"📺 {title}{suffix}")
-    file_name = item.get("file_name") or "Unknown file"
+    file_name = item.get("file_name") or t("common.unknown_file")
     return _truncate_text(f"📁 {file_name}")
 
 
 def _build_quality_label(file_data: Dict[str, Any]) -> str:
-    quality = file_data.get("quality") or "Unknown"
+    quality = file_data.get("quality") or t("common.unknown")
     size = get_readable_size(file_data.get("file_size", 0))
     codec = file_data.get("video_codec") or file_data.get("source") or ""
     if codec:
@@ -269,9 +270,9 @@ def _normalize_quality_choice(file_info: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "chat_id": file_info.get("chat_id"),
         "message_id": file_info.get("message_id"),
-        "file_name": file_info.get("file_name") or "Unknown file",
+        "file_name": file_info.get("file_name") or t("common.unknown_file"),
         "file_size": file_info.get("file_size") or 0,
-        "quality": file_info.get("quality") or "Unknown",
+        "quality": file_info.get("quality") or t("common.unknown"),
         "video_codec": file_info.get("video_codec"),
         "source": file_info.get("source"),
     }
@@ -322,9 +323,9 @@ def _build_page_row(
     if total_pages <= 1:
         return nav_row
     if page > 1:
-        nav_row.append(Button.inline("⬅️ Prev", _callback_data(session_id, action, page - 1)))
+        nav_row.append(Button.inline(t("common.prev"), _callback_data(session_id, action, page - 1)))
     if page < total_pages:
-        nav_row.append(Button.inline("Next ➡️", _callback_data(session_id, action, page + 1)))
+        nav_row.append(Button.inline(t("common.next"), _callback_data(session_id, action, page + 1)))
     return nav_row
 
 
@@ -336,10 +337,12 @@ def _render_results_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
         SEARCH_RESULTS_PER_PAGE,
     )
 
-    text = (
-        f"🔍 Results for: **{session.get('query', '')}**\n"
-        f"Page `{max(1, min(page, total_pages))}/{total_pages}` • Total: **{len(results)}**\n\n"
-        "Select a result:"
+    text = t(
+        "search.results_view",
+        query=session.get("query", ""),
+        page=max(1, min(page, total_pages)),
+        total_pages=total_pages,
+        total_results=len(results),
     )
 
     buttons: List[List[Button]] = []
@@ -357,14 +360,14 @@ def _render_results_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
     nav_row = _build_page_row(session["session_id"], "rp", page, total_pages)
     if nav_row:
         buttons.append(nav_row)
-    buttons.append([Button.inline("❌ Close", _callback_data(session["session_id"], "close"))])
+    buttons.append([Button.inline(t("common.close"), _callback_data(session["session_id"], "close"))])
     return text, buttons
 
 
 def _render_seasons_view(session: Dict[str, Any], page: int) -> Tuple[str, List[List[Button]]]:
     selected = _get_selected_result(session)
     if not selected or _get_result_kind(selected) != "tv":
-        return "❌ Series not found in the active session.", []
+        return t("search.series_not_found"), []
 
     seasons = _get_series_seasons(selected)
     page_items, total_pages, start_idx = _paginate_items(
@@ -373,11 +376,12 @@ def _render_seasons_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
         SEARCH_ITEMS_PER_PAGE,
     )
 
-    title = selected.get("title") or selected.get("name") or "Series"
-    text = (
-        f"📺 **{_truncate_text(title, 60)}**\n"
-        f"Seasons • Page `{max(1, min(page, total_pages))}/{total_pages}`\n\n"
-        "Choose a season:"
+    title = selected.get("title") or selected.get("name") or t("common.series")
+    text = t(
+        "search.seasons_view",
+        title=_truncate_text(title, 60),
+        page=max(1, min(page, total_pages)),
+        total_pages=total_pages,
     )
 
     buttons: List[List[Button]] = []
@@ -385,7 +389,11 @@ def _render_seasons_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
         global_idx = start_idx + idx
         season_number = season.get("season_number")
         episode_count = len(season.get("episodes", []))
-        label = f"Season {season_number} ({episode_count} eps)"
+        label = t(
+            "search.season_label",
+            season_number=season_number,
+            episode_count=episode_count,
+        )
         buttons.append(
             [
                 Button.inline(
@@ -398,19 +406,19 @@ def _render_seasons_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
     nav_row = _build_page_row(session["session_id"], "sp", page, total_pages)
     if nav_row:
         buttons.append(nav_row)
-    buttons.append([Button.inline("⬅️ Back", _callback_data(session["session_id"], "back", "r"))])
-    buttons.append([Button.inline("❌ Close", _callback_data(session["session_id"], "close"))])
+    buttons.append([Button.inline(t("common.back"), _callback_data(session["session_id"], "back", "r"))])
+    buttons.append([Button.inline(t("common.close"), _callback_data(session["session_id"], "close"))])
     return text, buttons
 
 
 def _render_episodes_view(session: Dict[str, Any], page: int) -> Tuple[str, List[List[Button]]]:
     selected = _get_selected_result(session)
     if not selected or _get_result_kind(selected) != "tv":
-        return "❌ Series not found in the active session.", []
+        return t("search.series_not_found"), []
 
     season_number = session.get("selected_season")
     if season_number is None:
-        return "❌ Season not selected.", []
+        return t("search.season_not_selected"), []
 
     episodes = _get_season_episodes(selected, season_number)
     page_items, total_pages, start_idx = _paginate_items(
@@ -419,11 +427,13 @@ def _render_episodes_view(session: Dict[str, Any], page: int) -> Tuple[str, List
         SEARCH_ITEMS_PER_PAGE,
     )
 
-    title = selected.get("title") or selected.get("name") or "Series"
-    text = (
-        f"📺 **{_truncate_text(title, 60)}**\n"
-        f"Season **{season_number}** • Page `{max(1, min(page, total_pages))}/{total_pages}`\n\n"
-        "Choose an episode:"
+    title = selected.get("title") or selected.get("name") or t("common.series")
+    text = t(
+        "search.episodes_view",
+        title=_truncate_text(title, 60),
+        season_number=season_number,
+        page=max(1, min(page, total_pages)),
+        total_pages=total_pages,
     )
 
     buttons: List[List[Button]] = []
@@ -431,9 +441,16 @@ def _render_episodes_view(session: Dict[str, Any], page: int) -> Tuple[str, List
         global_idx = start_idx + idx
         episode_number = episode.get("episode_number")
         episode_number_int = _safe_int(episode_number)
-        episode_title = episode.get("title") or f"Episode {episode_number}"
+        episode_title = episode.get("title") or t(
+            "search.episode_fallback_title", episode_number=episode_number
+        )
         files_count = len(episode.get("file_info", []))
-        label = f"E{episode_number_int:02d} • {episode_title} ({files_count} files)"
+        label = t(
+            "search.episode_label",
+            episode_number=episode_number_int,
+            episode_title=episode_title,
+            files_count=files_count,
+        )
         buttons.append(
             [
                 Button.inline(
@@ -446,15 +463,15 @@ def _render_episodes_view(session: Dict[str, Any], page: int) -> Tuple[str, List
     nav_row = _build_page_row(session["session_id"], "ep", page, total_pages)
     if nav_row:
         buttons.append(nav_row)
-    buttons.append([Button.inline("⬅️ Back", _callback_data(session["session_id"], "back", "s"))])
-    buttons.append([Button.inline("❌ Close", _callback_data(session["session_id"], "close"))])
+    buttons.append([Button.inline(t("common.back"), _callback_data(session["session_id"], "back", "s"))])
+    buttons.append([Button.inline(t("common.close"), _callback_data(session["session_id"], "close"))])
     return text, buttons
 
 
 def _render_quality_view(session: Dict[str, Any], page: int) -> Tuple[str, List[List[Button]]]:
     selected = _get_selected_result(session)
     if not selected:
-        return "❌ Selected item not found.", []
+        return t("search.selected_item_not_found"), []
 
     kind = _get_result_kind(selected)
     choices = _get_quality_choices(session)
@@ -465,11 +482,11 @@ def _render_quality_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
     )
 
     if kind == "movie":
-        title = selected.get("title") or "Movie"
+        title = selected.get("title") or t("common.movie")
         header = f"🎬 **{_truncate_text(title, 60)}**"
         back_target = "r"
     elif kind == "tv":
-        title = selected.get("title") or selected.get("name") or "Series"
+        title = selected.get("title") or selected.get("name") or t("common.series")
         season_number = session.get("selected_season")
         episode_idx = session.get("selected_episode_idx")
         episodes = _get_season_episodes(selected, season_number)
@@ -481,14 +498,15 @@ def _render_quality_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
         header = f"📺 **{_truncate_text(title, 60)}** • S{season_number_int:02d}E{episode_number_int:02d}"
         back_target = "e"
     else:
-        file_name = selected.get("file_name") or "Raw file"
+        file_name = selected.get("file_name") or t("common.raw_file")
         header = f"📁 **{_truncate_text(file_name, 60)}**"
         back_target = "r"
 
-    text = (
-        f"{header}\n"
-        f"Files • Page `{max(1, min(page, total_pages))}/{total_pages}`\n\n"
-        "Choose quality/file:"
+    text = t(
+        "search.quality_view",
+        header=header,
+        page=max(1, min(page, total_pages)),
+        total_pages=total_pages,
     )
 
     buttons: List[List[Button]] = []
@@ -506,26 +524,26 @@ def _render_quality_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
     nav_row = _build_page_row(session["session_id"], "qp", page, total_pages)
     if nav_row:
         buttons.append(nav_row)
-    buttons.append([Button.inline("⬅️ Back", _callback_data(session["session_id"], "back", back_target))])
-    buttons.append([Button.inline("❌ Close", _callback_data(session["session_id"], "close"))])
+    buttons.append([Button.inline(t("common.back"), _callback_data(session["session_id"], "back", back_target))])
+    buttons.append([Button.inline(t("common.close"), _callback_data(session["session_id"], "close"))])
     return text, buttons
 
 
 async def _start_search_flow(event, search_query: str) -> None:
     query = (search_query or "").strip()
     if not query:
-        await event.reply("Use /search <query>")
+        await event.reply(t("search.use_query"))
         return
 
     results = await _fetch_search_results(query)
     if not results:
-        await event.reply(f"No results found for \"{query}\".")
+        await event.reply(t("search.no_results", query=query))
         return
 
     session_id = search_sessions.create_session(event.sender_id, query, results)
     session = search_sessions.get_session(session_id)
     if not session:
-        await event.reply("❌ Failed to create search session. Please try again.")
+        await event.reply(t("search.failed_session"))
         return
 
     text, buttons = _render_results_view(session, page=1)
@@ -534,26 +552,7 @@ async def _start_search_flow(event, search_query: str) -> None:
 
 @StreamBot.on(events.NewMessage(pattern=r"^/start(?: |$)", func=lambda e: e.is_private))
 async def start(event):
-    await event.reply(
-        f"🚀 **Jackgram v{__version__}**\n\n"
-        "👋 **Welcome to JackgramBot!**\n\n"
-        "**📌 Indexing**\n"
-        "/index — Index files from a channel (wizard or direct)\n\n"
-        "**🔍 Search & Browse**\n"
-        "/search `<query>` — Find indexed files\n"
-        "/count — Database statistics\n\n"
-        "**🗃️ Database Management**\n"
-        "/del `<tmdb_id>` — Delete a TMDb entry\n"
-        "/del_channel `<chat_id>` — Delete all entries for a chat\n"
-        "/save_db — Back up the database\n"
-        "/load_db — Restore from backup (reply to JSON)\n"
-        "/del_db `<name>` — Delete a database\n\n"
-        "**🔧 Admin**\n"
-        "/token — Generate an API access token\n"
-        "/log — Download the bot log file\n\n"
-        "🧙‍♂️ **Contribute:** Send a media file directly to start the contribution wizard!\n"
-        "🚀 Files posted in indexed channels are auto-processed!"
-    )
+    await event.reply(t("start.welcome", version=__version__))
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/index(?: |$)", func=lambda e: e.is_private))
@@ -580,16 +579,16 @@ async def index(event):
             elif client_type == "user":
                 client = await multi_session_manager.get_client()
             else:
-                await event.reply("Invalid client type. Use 'bot' or 'user'.")
+                await event.reply(t("index.invalid_client_type"))
                 return
 
             if count_msg <= 0:
-                await event.reply("The count must be greater than 0.")
+                await event.reply(t("index.count_must_be_greater_than_zero"))
                 return
 
             # Continue to indexing logic below (shared)
         except ValueError:
-            await event.reply("Invalid IDs. Please provide numbers.")
+            await event.reply(t("index.invalid_ids"))
             return
 
     # User friendly: Interactive Wizard
@@ -600,7 +599,7 @@ async def index(event):
             async with StreamBot.conversation(event.chat_id, timeout=300) as conv:
                 # Step 1: Chat ID
                 await conv.send_message(
-                    "🔍 **Indexing Wizard**\n\nPlease send the **Chat ID** or **Username** of the channel you want to index."
+                    t("index.wizard_intro")
                 )
                 chat_reply = await conv.get_response()
                 chat_id = chat_reply.text.strip()
@@ -609,24 +608,22 @@ async def index(event):
                 elif chat_id.replace("-", "").isdigit():
                     chat_id = int(chat_id)
                 else:
-                    await conv.send_message("❌ Invalid Chat ID or Username.")
+                    await conv.send_message(t("index.invalid_chat_id_or_username"))
                     return
 
                 # Step 2: Range (First ID & Count)
                 await conv.send_message(
-                    "🔢 Send the **Start Message ID** and the **Count of Messages** to index separated by a space (e.g., `1 100`)."
+                    t("index.range_prompt")
                 )
                 range_reply = await conv.get_response()
                 try:
                     first_id, count_msg = map(int, range_reply.text.split())
                     if count_msg <= 0:
-                        await conv.send_message("❌ The count must be greater than 0.")
+                        await conv.send_message(t("index.count_must_be_greater_than_zero"))
                         return
                     last_id = first_id + count_msg - 1
                 except ValueError:
-                    await conv.send_message(
-                        "❌ Invalid format. Please send two numbers separated by a space."
-                    )
+                    await conv.send_message(t("index.invalid_range_format"))
                     return
 
                 # Step 2.5: Logs Channel
@@ -644,12 +641,10 @@ async def index(event):
                     formatted_buttons = [
                         log_buttons[i : i + 2] for i in range(0, len(log_buttons), 2)
                     ]
-                    formatted_buttons.append(
-                        [Button.inline("❌ Cancel", b"idx_cancel")]
-                    )
+                    formatted_buttons.append([Button.inline(t("common.cancel"), b"idx_cancel")])
 
                     log_prompt = await conv.send_message(
-                        "📂 **Which Logs Channel should I use?**",
+                        t("index.which_logs_channel"),
                         buttons=formatted_buttons,
                     )
 
@@ -659,27 +654,28 @@ async def index(event):
                     action_log = res_log.data.decode()
 
                     if action_log == "idx_cancel":
-                        await res_log.edit("❌ Indexing cancelled.")
+                        await res_log.edit(t("index.cancelled"))
                         return
 
                     if action_log.startswith("idx_log_"):
                         idx = int(action_log.split("_")[-1])
                         selected_log_channel = LOGS_CHANNELS[idx]["id"]
                         await res_log.edit(
-                            f"✅ Selected Logs Channel: **{LOGS_CHANNELS[idx]['name']}**"
+                            t(
+                                "index.selected_logs_channel",
+                                channel_name=LOGS_CHANNELS[idx]["name"],
+                            )
                         )
 
                 # Step 3: Client Type Buttons
                 prompt = await conv.send_message(
-                    "🤖 **Which client should I use for indexing?**\n\n"
-                    "• **Bot**: Faster to start, but subject to strict bot limits.\n"
-                    "• **User**: Uses your multi-session user accounts, better for large channels.",
+                    t("index.which_client"),
                     buttons=[
                         [
-                            Button.inline("🤖 Bot", b"idx_bot"),
-                            Button.inline("👤 User", b"idx_user"),
+                            Button.inline(f"🤖 {t('common.bot')}", b"idx_bot"),
+                            Button.inline(f"👤 {t('common.user')}", b"idx_user"),
                         ],
-                        [Button.inline("❌ Cancel", b"idx_cancel")],
+                        [Button.inline(t("common.cancel"), b"idx_cancel")],
                     ],
                 )
 
@@ -689,7 +685,7 @@ async def index(event):
                 action = res.data.decode()
 
                 if action == "idx_cancel":
-                    await res.edit("❌ Indexing cancelled.")
+                    await res.edit(t("index.cancelled"))
                     return
 
                 client_type = "bot" if action == "idx_bot" else "user"
@@ -700,42 +696,42 @@ async def index(event):
                     client = await multi_session_manager.get_client()
 
                 await res.edit(
-                    f"✅ Selected: **{client_type.capitalize()}**\n⏳ Starting index..."
+                    t(
+                        "index.selected_client_starting",
+                        client_type=t(
+                            "common.bot" if client_type == "bot" else "common.user"
+                        ),
+                    )
                 )
 
         except asyncio.TimeoutError:
-            await event.reply("⏳ Indexing wizard timed out.")
+            await event.reply(t("index.wizard_timed_out"))
             return
         except Exception as e:
             logging.error(f"Index wizard error: {e}")
-            await event.reply(f"❌ Error: {e}")
+            await event.reply(t("index.error", error=e))
             return
         finally:
             mark_conversation_inactive(sender_id)
     else:
-        await event.reply(
-            "🚀 **Quick Indexing**\n\n"
-            "Usage: `/index chat_id first_id count client_type [logs_channel]`\n"
-            "Example: `/index -10012345 1 500 bot`\n\n"
-            "💡 Or just send `/index` without parameters to use the **wizard**!"
-        )
+        await event.reply(t("index.quick_usage"))
         return
 
     # Re-check client availability if selected via wizard/power user
     if not client:
-        await event.reply("❌ Selected client is not available or configured.")
+        await event.reply(t("index.selected_client_unavailable"))
         return
 
     # Shared Indexing Logic
     total_range = last_id - first_id + 1
     try:
-        start_message = (
-            "🔄 **Indexing in progress...**\n\n"
-            f"📡 Channel: `{chat_id}`\n"
-            f"📨 Range: `{first_id}` → `{last_id}` ({total_range} messages)\n"
-            f"📂 Output: `{selected_log_channel}`\n\n"
-            "⏳ 0% — Starting...\n\n"
-            "🚫 Do not start another index until this completes."
+        start_message = t(
+            "index.progress_start",
+            chat_id=chat_id,
+            first_id=first_id,
+            last_id=last_id,
+            total_range=total_range,
+            selected_log_channel=selected_log_channel,
         )
         wait_msg = await event.reply(start_message)
 
@@ -747,13 +743,22 @@ async def index(event):
             bar = "█" * bar_filled + "░" * (20 - bar_filled)
             try:
                 await wait_msg.edit(
-                    f"🔄 **Indexing in progress...**\n\n"
-                    f"📡 Channel: `{chat_id}`\n"
-                    f"`{bar}` **{pct}%**\n\n"
-                    f"  ✅ Indexed: **{stats.get('indexed', 0)}**\n"
-                    f"  ⏭️ Skipped: {stats.get('skipped_no_media', 0) + stats.get('skipped_size', 0) + stats.get('skipped_keyword', 0) + stats.get('skipped_ext', 0)}\n"
-                    f"  ❌ Errors: {stats.get('errors', 0)}\n\n"
-                    f"📨 Message `{current_id}` / `{last_id}`"
+                    t(
+                        "index.progress_update",
+                        chat_id=chat_id,
+                        bar=bar,
+                        pct=pct,
+                        indexed=stats.get("indexed", 0),
+                        skipped=(
+                            stats.get("skipped_no_media", 0)
+                            + stats.get("skipped_size", 0)
+                            + stats.get("skipped_keyword", 0)
+                            + stats.get("skipped_ext", 0)
+                        ),
+                        errors=stats.get("errors", 0),
+                        current_id=current_id,
+                        last_id=last_id,
+                    )
                 )
             except Exception:
                 pass  # Ignore edit failures (e.g. FloodWait)
@@ -774,23 +779,22 @@ async def index(event):
             + stats.get("skipped_keyword", 0)
             + stats.get("skipped_ext", 0)
         )
-        summary = (
-            "✅ **Indexing complete!**\n\n"
-            "📊 **Stats:**\n"
-            f"  • Indexed: **{stats.get('indexed', 0)}**\n"
-            f"  • Skipped (too small): {stats.get('skipped_size', 0)}\n"
-            f"  • Skipped (adult keyword): {stats.get('skipped_keyword', 0)}\n"
-            f"  • Skipped (invalid ext): {stats.get('skipped_ext', 0)}\n"
-            f"  • Skipped (no media): {stats.get('skipped_no_media', 0)}\n"
-            f"  • Errors: {stats.get('errors', 0)}\n\n"
-            f"Total skipped by filters: **{total_skipped}**"
+        summary = t(
+            "index.complete_summary",
+            indexed=stats.get("indexed", 0),
+            skipped_size=stats.get("skipped_size", 0),
+            skipped_keyword=stats.get("skipped_keyword", 0),
+            skipped_ext=stats.get("skipped_ext", 0),
+            skipped_no_media=stats.get("skipped_no_media", 0),
+            errors=stats.get("errors", 0),
+            total_skipped=total_skipped,
         )
         await event.reply(summary)
 
     except FloodWaitError as e:
         logging.warning(f"FloodWait during index: sleeping for {e.seconds}s")
         await sleep(e.seconds)
-        await event.reply(f"⏳ Got FloodWait of {e.seconds}s")
+        await event.reply(t("index.floodwait", seconds=e.seconds))
 
 
 @StreamBot.on(
@@ -801,7 +805,7 @@ async def search(event):
         return
     args = event.message.text.split()[1:]
     if not args:
-        await event.reply("Use /search <query>")
+        await event.reply(t("search.use_query"))
         return
     await _start_search_flow(event, " ".join(args))
 
@@ -826,33 +830,33 @@ async def search_text_message(event):
 async def search_callback(event):
     session_id, action, value = _parse_callback_data(event.data)
     if not session_id or not action:
-        await event.answer("Invalid action.", alert=True)
+        await event.answer(t("common.invalid_action"), alert=True)
         return
 
     session = search_sessions.touch(session_id)
     if not session:
-        await event.answer("This search has expired. Send your query again.", alert=True)
+        await event.answer(t("search.this_search_expired_retry"), alert=True)
         return
 
     if session.get("sender_id") != event.sender_id:
-        await event.answer("These buttons are not for you.", alert=True)
+        await event.answer(t("search.these_buttons_not_for_you"), alert=True)
         return
 
     try:
         if action == "close":
             search_sessions.delete_session(session_id)
-            await event.edit("❌ Search closed.", buttons=None)
+            await event.edit(t("search.closed"), buttons=None)
             await event.answer()
             return
 
         if action == "rp":
             page = _parse_callback_int(value)
             if page is None:
-                await event.answer("Invalid page.", alert=True)
+                await event.answer(t("search.invalid_page"), alert=True)
                 return
             session = search_sessions.update_session(session_id, results_page=page)
             if not session:
-                await event.answer("This search has expired.", alert=True)
+                await event.answer(t("search.this_search_expired"), alert=True)
                 return
             text, buttons = _render_results_view(session, page)
             await event.edit(text, buttons=buttons)
@@ -862,11 +866,11 @@ async def search_callback(event):
         if action == "ri":
             idx = _parse_callback_int(value)
             if idx is None:
-                await event.answer("Invalid selection.", alert=True)
+                await event.answer(t("search.invalid_selection"), alert=True)
                 return
             results = session.get("results", [])
             if idx < 0 or idx >= len(results):
-                await event.answer("Invalid selection.", alert=True)
+                await event.answer(t("search.invalid_selection"), alert=True)
                 return
             selected_item = results[idx]
             kind = _get_result_kind(selected_item)
@@ -880,7 +884,7 @@ async def search_callback(event):
                 quality_page=1,
             )
             if not session:
-                await event.answer("This search has expired.", alert=True)
+                await event.answer(t("search.this_search_expired"), alert=True)
                 return
 
             if kind == "tv":
@@ -895,11 +899,11 @@ async def search_callback(event):
         if action == "sp":
             page = _parse_callback_int(value)
             if page is None:
-                await event.answer("Invalid page.", alert=True)
+                await event.answer(t("search.invalid_page"), alert=True)
                 return
             session = search_sessions.update_session(session_id, seasons_page=page)
             if not session:
-                await event.answer("This search has expired.", alert=True)
+                await event.answer(t("search.this_search_expired"), alert=True)
                 return
             text, buttons = _render_seasons_view(session, page)
             await event.edit(text, buttons=buttons)
@@ -909,15 +913,15 @@ async def search_callback(event):
         if action == "si":
             idx = _parse_callback_int(value)
             if idx is None:
-                await event.answer("Invalid season.", alert=True)
+                await event.answer(t("search.invalid_season"), alert=True)
                 return
             selected = _get_selected_result(session)
             if not selected or _get_result_kind(selected) != "tv":
-                await event.answer("Invalid series selection.", alert=True)
+                await event.answer(t("search.invalid_series_selection"), alert=True)
                 return
             seasons = _get_series_seasons(selected)
             if idx < 0 or idx >= len(seasons):
-                await event.answer("Invalid season.", alert=True)
+                await event.answer(t("search.invalid_season"), alert=True)
                 return
 
             season_number = seasons[idx].get("season_number")
@@ -929,7 +933,7 @@ async def search_callback(event):
                 quality_page=1,
             )
             if not session:
-                await event.answer("This search has expired.", alert=True)
+                await event.answer(t("search.this_search_expired"), alert=True)
                 return
             text, buttons = _render_episodes_view(session, page=1)
             await event.edit(text, buttons=buttons)
@@ -939,11 +943,11 @@ async def search_callback(event):
         if action == "ep":
             page = _parse_callback_int(value)
             if page is None:
-                await event.answer("Invalid page.", alert=True)
+                await event.answer(t("search.invalid_page"), alert=True)
                 return
             session = search_sessions.update_session(session_id, episodes_page=page)
             if not session:
-                await event.answer("This search has expired.", alert=True)
+                await event.answer(t("search.this_search_expired"), alert=True)
                 return
             text, buttons = _render_episodes_view(session, page)
             await event.edit(text, buttons=buttons)
@@ -953,16 +957,16 @@ async def search_callback(event):
         if action == "ei":
             idx = _parse_callback_int(value)
             if idx is None:
-                await event.answer("Invalid episode.", alert=True)
+                await event.answer(t("search.invalid_episode"), alert=True)
                 return
             selected = _get_selected_result(session)
             if not selected or _get_result_kind(selected) != "tv":
-                await event.answer("Invalid episode selection.", alert=True)
+                await event.answer(t("search.invalid_episode_selection"), alert=True)
                 return
             season_number = session.get("selected_season")
             episodes = _get_season_episodes(selected, season_number)
             if idx < 0 or idx >= len(episodes):
-                await event.answer("Invalid episode.", alert=True)
+                await event.answer(t("search.invalid_episode"), alert=True)
                 return
 
             session = search_sessions.update_session(
@@ -971,7 +975,7 @@ async def search_callback(event):
                 quality_page=1,
             )
             if not session:
-                await event.answer("This search has expired.", alert=True)
+                await event.answer(t("search.this_search_expired"), alert=True)
                 return
             text, buttons = _render_quality_view(session, page=1)
             await event.edit(text, buttons=buttons)
@@ -981,11 +985,11 @@ async def search_callback(event):
         if action == "qp":
             page = _parse_callback_int(value)
             if page is None:
-                await event.answer("Invalid page.", alert=True)
+                await event.answer(t("search.invalid_page"), alert=True)
                 return
             session = search_sessions.update_session(session_id, quality_page=page)
             if not session:
-                await event.answer("This search has expired.", alert=True)
+                await event.answer(t("search.this_search_expired"), alert=True)
                 return
             text, buttons = _render_quality_view(session, page)
             await event.edit(text, buttons=buttons)
@@ -995,18 +999,18 @@ async def search_callback(event):
         if action == "qi":
             idx = _parse_callback_int(value)
             if idx is None:
-                await event.answer("Invalid file selection.", alert=True)
+                await event.answer(t("search.invalid_file_selection"), alert=True)
                 return
             choices = _get_quality_choices(session)
             if idx < 0 or idx >= len(choices):
-                await event.answer("Invalid file selection.", alert=True)
+                await event.answer(t("search.invalid_file_selection"), alert=True)
                 return
 
             selected_file = choices[idx]
             chat_id = _safe_int(selected_file.get("chat_id"), 0)
             message_id = _safe_int(selected_file.get("message_id"), 0)
             if not chat_id or not message_id:
-                await event.answer("File source not found.", alert=True)
+                await event.answer(t("search.file_source_not_found"), alert=True)
                 return
 
             logging.warning(
@@ -1015,7 +1019,7 @@ async def search_callback(event):
                 chat_id,
                 message_id,
             )
-            await event.answer("Preparing file...", alert=False)
+            await event.answer(t("search.preparing_file"), alert=False)
             logging.warning("Fetching source message with bot client")
             src_message, source_entity = await _fetch_source_message(
                 event.client,
@@ -1025,7 +1029,7 @@ async def search_callback(event):
 
             if not src_message or source_entity is None:
                 await event.answer(
-                    "Bot cannot access the source channel message. Check bot access to the logs channel.",
+                    t("search.source_channel_inaccessible"),
                     alert=True,
                 )
                 return
@@ -1038,7 +1042,7 @@ async def search_callback(event):
             )
             if not forwarded:
                 await event.answer(
-                    "Telegram did not forward this file. Try again.",
+                    t("search.telegram_did_not_forward"),
                     alert=True,
                 )
                 return
@@ -1049,7 +1053,7 @@ async def search_callback(event):
                 chat_id,
                 message_id,
             )
-            await event.answer("✅ File sent.", alert=False)
+            await event.answer(t("search.file_sent"), alert=False)
             return
 
         if action == "back":
@@ -1064,17 +1068,17 @@ async def search_callback(event):
                 page = _safe_int(session.get("episodes_page", 1), 1)
                 text, buttons = _render_episodes_view(session, page)
             else:
-                await event.answer("Invalid navigation.", alert=True)
+                await event.answer(t("search.invalid_navigation"), alert=True)
                 return
 
             await event.edit(text, buttons=buttons)
             await event.answer()
             return
 
-        await event.answer("Unknown action.", alert=True)
+        await event.answer(t("search.unknown_action"), alert=True)
 
     except FloodWaitError as e:
-        await event.answer(f"FloodWait: wait {e.seconds}s.", alert=True)
+        await event.answer(t("search.floodwait", seconds=e.seconds), alert=True)
     except Exception as e:
         logging.exception(
             "Search callback error: %s (sender_id=%s, callback=%s)",
@@ -1082,7 +1086,7 @@ async def search_callback(event):
             event.sender_id,
             event.data,
         )
-        await event.answer("Error processing this action.", alert=True)
+        await event.answer(t("common.error_processing_action"), alert=True)
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/del(?: |$)", func=lambda e: e.is_private))
@@ -1095,18 +1099,18 @@ async def delete(event):
         try:
             tmdb_id = int(args[0])
         except ValueError:
-            await event.reply("❌ Invalid TMDb ID. Please provide a number.")
+            await event.reply(t("delete.invalid_tmdb_id"))
             return
     else:
-        await event.reply("Use /del <tmdb_id>")
+        await event.reply(t("delete.use_del"))
         return
 
     result = await db.del_tmdb(tmdb_id=tmdb_id)
 
     if result.deleted_count > 0:
-        await event.reply("✅ Entry deleted successfully.")
+        await event.reply(t("delete.entry_deleted"))
     else:
-        await event.reply("No document found with the given TMDb ID.")
+        await event.reply(t("delete.no_document"))
 
 
 @StreamBot.on(
@@ -1121,25 +1125,23 @@ async def delete_channel(event):
         try:
             chat_id = int(args[0])
         except ValueError:
-            await event.reply(
-                "❌ Invalid Chat ID. Please provide a number (e.g. `-10012345`)."
-            )
+            await event.reply(t("delete_channel.invalid_chat_id"))
             return
     else:
-        await event.reply("Use /del_channel <chat_id>")
+        await event.reply(t("delete_channel.use_del_channel"))
         return
 
     # Add confirmation
     await event.reply(
-        f"⚠️ **Are you sure you want to delete all entries associated with chat `{chat_id}`?**",
+        t("delete_channel.confirm", chat_id=chat_id),
         buttons=[
             [
                 Button.inline(
-                    "✅ Yes, delete",
+                    t("common.yes_delete"),
                     f"delch_confirm:{chat_id}".encode(),
                 ),
             ],
-            [Button.inline("❌ Cancel", b"delch_cancel")],
+            [Button.inline(t("common.cancel"), b"delch_cancel")],
         ],
     )
 
@@ -1150,27 +1152,25 @@ async def delete_channel_callback(event):
     from jackgram.bot.bot import ADMIN_IDS
 
     if ADMIN_IDS and event.sender_id not in ADMIN_IDS:
-        await event.answer("⛔ Not authorized.", alert=True)
+        await event.answer(t("common.not_authorized"), alert=True)
         return
 
     data = event.data.decode()
     if data == "delch_cancel":
-        await event.edit("❌ Deletion cancelled.")
+        await event.edit(t("delete_channel.deletion_cancelled"))
         return
 
     if data.startswith("delch_confirm:"):
         chat_id = int(data.split(":", 1)[1])
-        await event.edit(f"⏳ Deleting entries for `{chat_id}`...")
+        await event.edit(t("delete_channel.deleting", chat_id=chat_id))
 
         stats = await db.del_by_chat_id(chat_id)
 
-        summary = (
-            f"✅ **Deletion Complete!**\n\n"
-            f"📊 **Stats:**\n"
-            f"  • Raw Files Deleted: **{stats['raw_deleted']}**\n"
-            f"  • Movies Modified: **{stats['movies_modified']}**\n"
-            f"  • TV Shows Modified: **{stats['tv_modified']}**\n\n"
-            "Entries with no remaining files were also removed."
+        summary = t(
+            "delete_channel.summary",
+            raw_deleted=stats["raw_deleted"],
+            movies_modified=stats["movies_modified"],
+            tv_modified=stats["tv_modified"],
         )
         await event.edit(summary)
 
@@ -1187,13 +1187,14 @@ async def count(event):
     storage_str = get_readable_size(total_storage)
 
     await event.reply(
-        "📊 **Database Statistics**\n\n"
-        f"🎬 Movies: **{movies}**\n"
-        f"📺 TV Shows: **{tv}**\n"
-        f"📁 Raw Files: **{files}**\n"
-        f"━━━━━━━━━━━━━━━━━\n"
-        f"📦 Total entries: **{total}**\n"
-        f"💾 Total storage: **{storage_str}**"
+        t(
+            "count.summary",
+            movies=movies,
+            tv=tv,
+            files=files,
+            total=total,
+            storage=storage_str,
+        )
     )
 
 
@@ -1202,14 +1203,11 @@ async def count(event):
 )
 @admin_only
 async def save_database(event):
-    status_msg = await event.reply("⏳ **Starting database backup...**")
+    status_msg = await event.reply(t("backup.starting"))
     try:
         os.makedirs(BACKUP_DIR, exist_ok=True)
     except PermissionError:
-        await status_msg.edit(
-            f"❌ Cannot create backup directory `{BACKUP_DIR}` — permission denied.\n"
-            "💡 Set `BACKUP_DIR` in config.env to a writable path."
-        )
+        await status_msg.edit(t("backup.permission_denied", backup_dir=BACKUP_DIR))
         return
 
     backup_data = {}
@@ -1218,8 +1216,12 @@ async def save_database(event):
 
     for i, collection_name in enumerate(collections):
         await status_msg.edit(
-            f"⏳ **Backing up database...**\n"
-            f"Processing collection: `{collection_name}` ({i+1}/{total_collections})"
+            t(
+                "backup.progress",
+                collection_name=collection_name,
+                current=i + 1,
+                total=total_collections,
+            )
         )
         collection = db.db[collection_name]
         cursor = collection.find({})
@@ -1233,18 +1235,18 @@ async def save_database(event):
 
         backup_data[collection_name] = serialized
 
-    await status_msg.edit("💾 **Writing backup file...**")
+    await status_msg.edit(t("backup.writing_file"))
     backup_file = os.path.join(BACKUP_DIR, "database_backup.json")
     try:
         with open(backup_file, "w") as file:
             json.dump(backup_data, file, indent=4)
     except OSError as e:
-        await status_msg.edit(f"❌ Failed to write backup file: {e}")
+        await status_msg.edit(t("backup.write_failed", error=e))
         return
 
     import time
 
-    await status_msg.edit("📤 **Starting upload to Telegram...**")
+    await status_msg.edit(t("backup.starting_upload"))
 
     last_edit = time.time()
 
@@ -1261,9 +1263,13 @@ async def save_database(event):
 
             try:
                 await status_msg.edit(
-                    f"📤 **Uploading backup file to Telegram...**\n\n"
-                    f"`{bar}` **{pct}%**\n"
-                    f"📦 {curr_str} / {total_str}"
+                    t(
+                        "backup.upload_progress",
+                        bar=bar,
+                        pct=pct,
+                        current_size=curr_str,
+                        total_size=total_str,
+                    )
                 )
                 last_edit = now
             except Exception:
@@ -1273,7 +1279,7 @@ async def save_database(event):
         await event.client.send_file(
             event.chat_id,
             file=backup_file,
-            caption="✅ **Backup completed!**\n\nAll collections and fields (including new poster data) have been exported.",
+            caption=t("backup.completed_caption"),
             progress_callback=upload_progress,
         )
     finally:
@@ -1286,38 +1292,34 @@ async def save_database(event):
 @admin_only
 async def load_database(event):
     if not event.is_reply:
-        await event.reply("Please reply to a JSON file with this command.")
+        await event.reply(t("restore.reply_with_json"))
         return
 
     reply_msg = await event.get_reply_message()
     if not reply_msg.document:
-        await event.reply("Please reply to a JSON file with this command.")
+        await event.reply(t("restore.reply_with_json"))
         return
 
     file_path = await event.client.download_media(reply_msg)
     if not file_path or not file_path.endswith(".json"):
-        await event.reply("The file must be a JSON file.")
+        await event.reply(t("restore.file_must_be_json"))
         return
 
     with open(file_path, "r") as file:
         try:
             backup_data = json.load(file)
         except json.JSONDecodeError:
-            await event.reply(
-                "Failed to load the file. Please ensure it is a valid JSON file."
-            )
+            await event.reply(t("restore.invalid_json_file"))
             return
 
     if not isinstance(backup_data, dict):
-        await event.reply(
-            "Invalid JSON structure. The file must contain a dictionary with collection names as keys."
-        )
+        await event.reply(t("restore.invalid_json_structure"))
         return
 
     for collection_name, documents in backup_data.items():
         if not isinstance(documents, list):
             await event.reply(
-                f"Invalid data for collection '{collection_name}'. Expected a list of documents."
+                t("restore.invalid_collection_data", collection_name=collection_name)
             )
             continue
 
@@ -1337,7 +1339,7 @@ async def load_database(event):
                     upsert=True,
                 )
 
-    await event.reply("Database restored successfully from the uploaded file!")
+    await event.reply(t("restore.success"))
 
 
 @StreamBot.on(
@@ -1351,20 +1353,19 @@ async def delete_database(event):
     if len(args) == 1:
         database_name = args[0]
     else:
-        await event.reply("Use /del_db <database_name>")
+        await event.reply(t("delete_db.use_del_db"))
         return
 
     await event.reply(
-        f"⚠️ **Are you sure you want to DELETE the entire `{database_name}` database?**\n\n"
-        "This action is **irreversible**.",
+        t("delete_db.confirm", database_name=database_name),
         buttons=[
             [
                 Button.inline(
-                    "✅ Yes, delete it",
+                    t("common.yes_delete_it"),
                     f"deldb_confirm:{database_name}".encode(),
                 ),
             ],
-            [Button.inline("❌ Cancel", b"deldb_cancel")],
+            [Button.inline(t("common.cancel"), b"deldb_cancel")],
         ],
     )
 
@@ -1375,18 +1376,18 @@ async def delete_database_callback(event):
     from jackgram.bot.bot import ADMIN_IDS
 
     if ADMIN_IDS and event.sender_id not in ADMIN_IDS:
-        await event.answer("⛔ Not authorized.", alert=True)
+        await event.answer(t("common.not_authorized"), alert=True)
         return
 
     data = event.data.decode()
     if data == "deldb_cancel":
-        await event.edit("❌ Database deletion cancelled.")
+        await event.edit(t("delete_db.cancelled"))
         return
 
     if data.startswith("deldb_confirm:"):
         database_name = data.split(":", 1)[1]
         await db.client.drop_database(database_name)
-        await event.edit(f"✅ Database `{database_name}` has been deleted.")
+        await event.edit(t("delete_db.deleted", database_name=database_name))
 
 
 @StreamBot.on(events.NewMessage(pattern=r"^/token(?: |$)", func=lambda e: e.is_private))
@@ -1409,7 +1410,7 @@ async def send_log_file(event):
         await event.client.send_file(
             event.chat_id,
             file=log_file_path,
-            caption="Here is the bot.log file.",
+            caption=t("log.caption"),
         )
     else:
-        await event.reply("The bot.log file does not exist.")
+        await event.reply(t("log.not_found"))

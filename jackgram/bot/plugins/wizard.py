@@ -11,6 +11,7 @@ from jackgram.bot.conversation_state import (
     mark_conversation_active,
     mark_conversation_inactive,
 )
+from jackgram.bot.i18n import t
 from jackgram.bot.utils import send_message
 from jackgram.utils.utils import (
     extract_file_info,
@@ -44,9 +45,7 @@ async def wizard_start(event: Message):
             r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", re.IGNORECASE
         )
         if multipart_pattern.search(filename):
-            await event.reply(
-                "❌ **Upload Rejected**\n\nThis appears to be a split/multipart file (e.g., Part 1, CD 2). These are not supported because they cannot be streamed natively."
-            )
+            await event.reply(t("wizard.multipart_rejected"))
             return
 
     # Auto-detect IMDb ID from caption
@@ -58,20 +57,19 @@ async def wizard_start(event: Message):
     try:
         async with StreamBot.conversation(chat_id, timeout=120) as conv:
             # Step 1: Ask for media type
-            prompt_text = "🧙‍♂️ **User Contribution Wizard**\n\nI detected a media file."
             if detected_imdb_id:
-                prompt_text += f"\n\n🔍 **Auto-detected IMDb ID:** `{detected_imdb_id}`\nIs this a Movie or a TV Show?"
+                prompt_text = t("wizard.prompt_with_imdb", imdb_id=detected_imdb_id)
             else:
-                prompt_text += " Is this a Movie or a TV Show?"
+                prompt_text = t("wizard.prompt_without_imdb")
 
             prompt_msg = await conv.send_message(
                 prompt_text,
                 buttons=[
                     [
-                        Button.inline("🎬 Movie", b"movie"),
-                        Button.inline("📺 TV Show", b"series"),
+                        Button.inline(f"🎬 {t('common.movie')}", b"movie"),
+                        Button.inline(f"📺 {t('common.tv_show')}", b"series"),
                     ],
-                    [Button.inline("❌ Cancel", b"cancel")],
+                    [Button.inline(t("common.cancel"), b"cancel")],
                 ],
             )
 
@@ -81,18 +79,18 @@ async def wizard_start(event: Message):
             action = res.data.decode()
 
             if action == "cancel":
-                await res.edit("❌ Wizard cancelled.")
+                await res.edit(t("wizard.cancelled"))
                 return
 
             media_type = action
-            type_str = "Movie" if media_type == "movie" else "TV Show"
-            await res.edit(f"✅ Selected: **{type_str}**")
+            type_str = t("common.movie") if media_type == "movie" else t("common.tv_show")
+            await res.edit(t("wizard.selected_type", type_name=type_str))
 
             # Step 2: Source TMDb ID (Auto or Manual)
             tmdb_id = None
             if detected_imdb_id:
                 wait_msg = await conv.send_message(
-                    f"🔍 Fetching TMDb data for `{detected_imdb_id}`..."
+                    t("wizard.fetching_tmdb", imdb_id=detected_imdb_id)
                 )
                 tmdb_id = await asyncio.to_thread(
                     tmdb.find_media_id, detected_imdb_id, media_type
@@ -100,7 +98,7 @@ async def wizard_start(event: Message):
                 await wait_msg.delete()
             else:
                 await conv.send_message(
-                    f"Please send the **TMDb ID** or the **exact title** of the {type_str}."
+                    t("wizard.ask_tmdb_or_title", type_name=type_str)
                 )
                 reply = await conv.get_response()
                 query = reply.text.strip()
@@ -108,31 +106,27 @@ async def wizard_start(event: Message):
                 if query.isdigit():
                     tmdb_id = int(query)
                 else:
-                    wait_msg = await conv.send_message("🔍 Searching TMDb...")
+                    wait_msg = await conv.send_message(t("wizard.searching_tmdb"))
                     tmdb_id = await asyncio.to_thread(
                         tmdb.find_media_id, query, media_type
                     )
                     await wait_msg.delete()
 
             if not tmdb_id:
-                await conv.send_message(
-                    "❌ Could not find a match on TMDb. Wizard cancelled."
-                )
+                await conv.send_message(t("wizard.tmdb_match_not_found"))
                 return
 
             # Fetch details
             details = await asyncio.to_thread(tmdb.get_details, tmdb_id, media_type)
             if not details or "id" not in details:
-                await conv.send_message(
-                    "❌ Failed to fetch TMDb details. Wizard cancelled."
-                )
+                await conv.send_message(t("wizard.tmdb_details_failed"))
                 return
 
             title = details.get("title") or details.get("name")
             year = (
                 details.get("release_date")
                 or details.get("first_air_date")
-                or "Unknown"
+                or t("common.unknown_year")
             )
             if year and "-" in year:
                 year = year.split("-")[0]
@@ -147,9 +141,7 @@ async def wizard_start(event: Message):
                 episode = ptn_data.get("episode")
 
                 if season is None or episode is None:
-                    await conv.send_message(
-                        "This is a TV Show, but I couldn't detect the Season and Episode from the filename.\n\nPlease reply with Season and Episode in the format: `S01E05`"
-                    )
+                    await conv.send_message(t("wizard.ask_season_episode"))
                     se_reply = await conv.get_response()
                     se_text = se_reply.text.strip().upper()
 
@@ -158,7 +150,7 @@ async def wizard_start(event: Message):
                         season = int(match.group(1))
                         episode = int(match.group(2))
                     else:
-                        await conv.send_message("❌ Invalid format. Wizard cancelled.")
+                        await conv.send_message(t("wizard.invalid_format_cancelled"))
                         return
 
             # Step 3.5: Logs Channel
@@ -176,10 +168,10 @@ async def wizard_start(event: Message):
                 formatted_buttons = [
                     log_buttons[i : i + 2] for i in range(0, len(log_buttons), 2)
                 ]
-                formatted_buttons.append([Button.inline("❌ Cancel", b"cancel")])
+                formatted_buttons.append([Button.inline(t("common.cancel"), b"cancel")])
 
                 log_prompt = await conv.send_message(
-                    "📂 **Which Logs Channel should I use to store this file?**",
+                    t("wizard.which_logs_channel"),
                     buttons=formatted_buttons,
                 )
 
@@ -189,26 +181,38 @@ async def wizard_start(event: Message):
                 action_log = res_log.data.decode()
 
                 if action_log == "cancel":
-                    await res_log.edit("❌ Wizard cancelled.")
+                    await res_log.edit(t("wizard.cancelled"))
                     return
 
                 if action_log.startswith("wiz_log_"):
                     idx = int(action_log.split("_")[-1])
                     selected_log_channel = LOGS_CHANNELS[idx]["id"]
                     await res_log.edit(
-                        f"✅ Selected Logs Channel: **{LOGS_CHANNELS[idx]['name']}**"
+                        t(
+                            "wizard.selected_logs_channel",
+                            channel_name=LOGS_CHANNELS[idx]["name"],
+                        )
                     )
 
             # Step 4: Confirmation
-            confirm_text = f"🍿 **Confirm Indexing**\n\nTitle: **{title}** ({year})\nType: **{type_str}**"
+            confirm_text = t(
+                "wizard.confirm_indexing",
+                title=title,
+                year=year,
+                type_name=type_str,
+            )
             if media_type == "series":
-                confirm_text += f"\nSeason: **{season}** | Episode: **{episode}**"
+                confirm_text += t(
+                    "wizard.confirm_indexing_series_extra",
+                    season=season,
+                    episode=episode,
+                )
 
             confirm_msg = await conv.send_message(
                 confirm_text,
                 buttons=[
-                    [Button.inline("✅ Confirm & Index", b"confirm")],
-                    [Button.inline("❌ Cancel", b"cancel")],
+                    [Button.inline(t("common.confirm_and_index"), b"confirm")],
+                    [Button.inline(t("common.cancel"), b"cancel")],
                 ],
             )
 
@@ -216,10 +220,10 @@ async def wizard_start(event: Message):
                 events.CallbackQuery(func=lambda e: e.sender_id == sender_id)
             )
             if res_confirm.data.decode() != "confirm":
-                await res_confirm.edit("❌ Wizard cancelled.")
+                await res_confirm.edit(t("wizard.cancelled"))
                 return
 
-            await res_confirm.edit("⏳ Indexing...")
+            await res_confirm.edit(t("wizard.indexing"))
 
             # Step 5: Process and Index
             # Forward the message to the logs channel to safely store it
@@ -239,14 +243,12 @@ async def wizard_start(event: Message):
                 data = {"season": season, "episode": episode}
                 await process_series(tmdb_id, data, details, ep_details, file_info)
 
-            await conv.send_message(
-                "🎉 **Successfully Indexed!**\n\nThe media has been validated by you and perfectly added to the database."
-            )
+            await conv.send_message(t("wizard.success"))
 
     except asyncio.TimeoutError:
-        await event.reply("⏳ Wizard timed out. Please send the file again to restart.")
+        await event.reply(t("wizard.timed_out_restart"))
     except Exception as e:
         logging.error(f"Wizard error: {e}")
-        await event.reply("❌ An unexpected error occurred while processing.")
+        await event.reply(t("wizard.unexpected_error"))
     finally:
         mark_conversation_inactive(sender_id)

@@ -10,6 +10,7 @@ import logging
 from functools import wraps
 
 from jackgram.bot.bot import ADMIN_IDS
+from jackgram.bot.i18n import t
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ def admin_only(func):
         # If ADMIN_IDS is not configured, allow everyone (backwards compat)
         if ADMIN_IDS and event.sender_id not in ADMIN_IDS:
             logger.warning(f"Unauthorized command attempt by user {event.sender_id}")
-            await event.reply("⛔ You are not authorized to use this command.")
+            await event.reply(t("common.not_authorized_command"))
             return
         return await func(event, *args, **kwargs)
 

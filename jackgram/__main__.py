@@ -10,6 +10,7 @@ from jackgram.bot.bot import (
     BOT_TOKEN,
     StreamBot,
 )
+from jackgram.bot.i18n import t
 from jackgram import app, __version__
 
 import uvicorn
@@ -57,26 +58,17 @@ async def start_services():
 
     try:
         commands = [
-            BotCommand(
-                command="start", description="Start interaction and show help message"
-            ),
-            BotCommand(
-                command="index",
-                description="Index files from a channel (wizard or direct)",
-            ),
-            BotCommand(command="search", description="Search indexed files"),
-            BotCommand(command="count", description="Database statistics"),
-            BotCommand(command="save_db", description="Back up the database"),
-            BotCommand(
-                command="load_db", description="Restore from backup (reply to JSON)"
-            ),
-            BotCommand(command="del", description="Delete a TMDb entry"),
-            BotCommand(
-                command="del_channel", description="Delete all entries for a chat ID"
-            ),
-            BotCommand(command="del_db", description="Delete a database"),
-            BotCommand(command="token", description="Generate an API access token"),
-            BotCommand(command="log", description="Download the bot log file"),
+            BotCommand(command="start", description=t("command.start")),
+            BotCommand(command="index", description=t("command.index")),
+            BotCommand(command="search", description=t("command.search")),
+            BotCommand(command="count", description=t("command.count")),
+            BotCommand(command="save_db", description=t("command.save_db")),
+            BotCommand(command="load_db", description=t("command.load_db")),
+            BotCommand(command="del", description=t("command.del")),
+            BotCommand(command="del_channel", description=t("command.del_channel")),
+            BotCommand(command="del_db", description=t("command.del_db")),
+            BotCommand(command="token", description=t("command.token")),
+            BotCommand(command="log", description=t("command.log")),
         ]
 
         await StreamBot(
