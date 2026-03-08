@@ -91,6 +91,7 @@ Fill your `config.env` with these essential variables. You can get Telegram API 
 | `BOT_TOKEN` | Telegram Bot Token ([@BotFather](https://t.me/BotFather)) | Required |
 | `TMDB_API` | TMDb API Key | Required |
 | `BOT_LANGUAGE` | Global Telegram bot UI language (`en` or `es`) | `en` |
+| `START_WELCOME_MESSAGE` | Custom `/start` welcome text; supports `\n` and `{version}` | Default localized message |
 | `LOGS_CHANNEL` | Comma-separated channel IDs with optional names (e.g., `-1001:Movies,-1002:Series`) | Required |
 | `BASE_URL` | Public IP/Domain of your server | Required |
 | `DATABASE_URL` | MongoDB connection string | `mongodb://admin:admin@mongo:27017` |
@@ -113,6 +114,8 @@ The Telegram bot supports a global UI language configured through `config.env`.
 
 - Set `BOT_LANGUAGE="en"` to keep the current English bot text.
 - Set `BOT_LANGUAGE="es"` to show bot messages and button labels in Spanish.
+- Set `START_WELCOME_MESSAGE="..."` to override the `/start` welcome text from `config.env`.
+- `START_WELCOME_MESSAGE` supports `\n` for line breaks and `{version}` for the current Jackgram version.
 - English remains the fallback if a translation key is missing.
 
 Implementation notes and maintenance workflow are documented in `docs/bot-localization.md`.

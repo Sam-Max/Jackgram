@@ -99,6 +99,7 @@ else:
 
 TMDB_LANGUAGE = getenv("TMDB_LANGUAGE", "en-US")
 BOT_LANGUAGE = getenv("BOT_LANGUAGE", "en")
+START_WELCOME_MESSAGE = getenv("START_WELCOME_MESSAGE", "")
 WORKERS = int(getenv("WORKERS", "10"))
 
 # WebServer

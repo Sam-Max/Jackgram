@@ -12,7 +12,14 @@ from bson.objectid import ObjectId
 from telethon import events, Button
 from telethon.errors import FloodWaitError
 
-from jackgram.bot.bot import BACKUP_DIR, SECRET_KEY, get_db, StreamBot, LOGS_CHANNELS
+from jackgram.bot.bot import (
+    BACKUP_DIR,
+    LOGS_CHANNELS,
+    SECRET_KEY,
+    START_WELCOME_MESSAGE,
+    StreamBot,
+    get_db,
+)
 from jackgram.bot.auth import admin_only
 from jackgram.bot.conversation_state import (
     is_conversation_active,
@@ -673,6 +680,15 @@ async def _start_search_flow(event, search_query: str) -> None:
 
 @StreamBot.on(events.NewMessage(pattern=r"^/start(?: |$)", func=lambda e: e.is_private))
 async def start(event):
+    if START_WELCOME_MESSAGE:
+        welcome_text = START_WELCOME_MESSAGE.replace("\\n", "\n")
+        try:
+            welcome_text = welcome_text.format(version=__version__)
+        except (KeyError, ValueError):
+            pass
+        await event.reply(welcome_text)
+        return
+
     await event.reply(t("start.welcome", version=__version__))
 
 
