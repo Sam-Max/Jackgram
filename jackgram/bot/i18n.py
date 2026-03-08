@@ -80,6 +80,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
             "Season **{season_number}** • Page `{page}/{total_pages}`\n\n"
             "Choose an episode:"
         ),
+        "search.send_full_season": "Send full season",
         "search.episode_fallback_title": "Episode {episode_number}",
         "search.episode_label": "E{episode_number:02d} • {episode_title} ({files_count} files)",
         "search.selected_item_not_found": "❌ Selected item not found.",
@@ -88,6 +89,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
             "Files • Page `{page}/{total_pages}`\n\n"
             "Choose quality/file:"
         ),
+        "search.season_quality_view": (
+            "📺 **{title}**\n"
+            "Season **{season_number}** • Page `{page}/{total_pages}`\n\n"
+            "Choose one quality for the whole season:"
+        ),
+        "search.season_quality_label": "{quality} • {episode_count} eps",
         "search.this_search_expired": "This search has expired.",
         "search.this_search_expired_retry": "This search has expired. Send your query again.",
         "search.these_buttons_not_for_you": "These buttons are not for you.",
@@ -106,6 +113,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         ),
         "search.telegram_did_not_forward": "Telegram did not forward this file. Try again.",
         "search.file_sent": "✅ File sent.",
+        "search.preparing_season": "Preparing season...",
+        "search.season_send_failed": "Unable to send this season with that quality.",
+        "search.season_sent": "✅ Sent {sent_count} episodes in {quality}.",
         "search.invalid_navigation": "Invalid navigation.",
         "search.unknown_action": "Unknown action.",
         "search.floodwait": "FloodWait: wait {seconds}s.",
@@ -350,6 +360,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
             "Temporada **{season_number}** • Pagina `{page}/{total_pages}`\n\n"
             "Elige un episodio:"
         ),
+        "search.send_full_season": "Enviar temporada completa",
         "search.episode_fallback_title": "Episodio {episode_number}",
         "search.episode_label": "E{episode_number:02d} • {episode_title} ({files_count} archivos)",
         "search.selected_item_not_found": "❌ No se encontro el elemento seleccionado.",
@@ -358,6 +369,12 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
             "Archivos • Pagina `{page}/{total_pages}`\n\n"
             "Elige calidad/archivo:"
         ),
+        "search.season_quality_view": (
+            "📺 **{title}**\n"
+            "Temporada **{season_number}** • Pagina `{page}/{total_pages}`\n\n"
+            "Elige una calidad para toda la temporada:"
+        ),
+        "search.season_quality_label": "{quality} • {episode_count} eps",
         "search.this_search_expired": "Esta busqueda ha expirado.",
         "search.this_search_expired_retry": "Esta busqueda ha expirado. Envia tu consulta otra vez.",
         "search.these_buttons_not_for_you": "Estos botones no son para ti.",
@@ -376,6 +393,9 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         ),
         "search.telegram_did_not_forward": "Telegram no reenvio este archivo. Intentalo de nuevo.",
         "search.file_sent": "✅ Archivo enviado.",
+        "search.preparing_season": "Preparando temporada...",
+        "search.season_send_failed": "No se pudo enviar la temporada con esa calidad.",
+        "search.season_sent": "✅ Se enviaron {sent_count} episodios en {quality}.",
         "search.invalid_navigation": "Navegacion invalida.",
         "search.unknown_action": "Accion desconocida.",
         "search.floodwait": "FloodWait: espera {seconds}s.",

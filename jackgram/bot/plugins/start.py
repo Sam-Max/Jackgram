@@ -313,6 +313,80 @@ def _get_quality_choices(session: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
+def _get_season_quality_choices(session: Dict[str, Any]) -> List[Dict[str, Any]]:
+    selected = _get_selected_result(session)
+    if not selected or _get_result_kind(selected) != "tv":
+        return []
+
+    season_number = session.get("selected_season")
+    if season_number is None:
+        return []
+
+    grouped: Dict[str, Dict[str, Any]] = {}
+    episodes = _get_season_episodes(selected, season_number)
+    for episode in episodes:
+        episode_number = _safe_int(episode.get("episode_number"))
+        best_per_quality: Dict[str, Dict[str, Any]] = {}
+        for file_info in episode.get("file_info", []):
+            if not file_info.get("chat_id") or not file_info.get("message_id"):
+                continue
+            quality = file_info.get("quality") or t("common.unknown")
+            current = best_per_quality.get(quality)
+            if current is None or _safe_int(file_info.get("file_size")) > _safe_int(current.get("file_size")):
+                best_per_quality[quality] = _normalize_quality_choice(file_info)
+
+        for quality, choice in best_per_quality.items():
+            bucket = grouped.setdefault(
+                quality,
+                {
+                    "quality": quality,
+                    "files": [],
+                    "episode_count": 0,
+                    "total_size": 0,
+                },
+            )
+            choice["episode_number"] = episode_number
+            bucket["files"].append(choice)
+            bucket["episode_count"] += 1
+            bucket["total_size"] += _safe_int(choice.get("file_size"))
+
+    choices = list(grouped.values())
+    for choice in choices:
+        choice["files"].sort(key=lambda item: _safe_int(item.get("episode_number")))
+    choices.sort(key=lambda item: (_safe_int(item.get("episode_count")) * -1, item.get("quality") or ""))
+    return choices
+
+
+def _build_season_quality_label(choice: Dict[str, Any]) -> str:
+    quality = choice.get("quality") or t("common.unknown")
+    episode_count = _safe_int(choice.get("episode_count"))
+    return _truncate_text(
+        t(
+            "search.season_quality_label",
+            quality=quality,
+            episode_count=episode_count,
+        )
+    )
+
+
+async def _send_cached_file_to_chat(
+    client,
+    target_entity,
+    chat_id: int,
+    message_id: int,
+) -> bool:
+    src_message, source_entity = await _fetch_source_message(client, chat_id, message_id)
+    if not src_message or source_entity is None:
+        return False
+
+    sent_message = await client.send_file(
+        entity=target_entity,
+        file=src_message.media,
+        caption=src_message.message or "",
+    )
+    return bool(sent_message)
+
+
 def _build_page_row(
     session_id: str,
     action: str,
@@ -463,6 +537,9 @@ def _render_episodes_view(session: Dict[str, Any], page: int) -> Tuple[str, List
     nav_row = _build_page_row(session["session_id"], "ep", page, total_pages)
     if nav_row:
         buttons.append(nav_row)
+    buttons.append(
+        [Button.inline(t("search.send_full_season"), _callback_data(session["session_id"], "sq", 1))]
+    )
     buttons.append([Button.inline(t("common.back"), _callback_data(session["session_id"], "back", "s"))])
     buttons.append([Button.inline(t("common.close"), _callback_data(session["session_id"], "close"))])
     return text, buttons
@@ -525,6 +602,50 @@ def _render_quality_view(session: Dict[str, Any], page: int) -> Tuple[str, List[
     if nav_row:
         buttons.append(nav_row)
     buttons.append([Button.inline(t("common.back"), _callback_data(session["session_id"], "back", back_target))])
+    buttons.append([Button.inline(t("common.close"), _callback_data(session["session_id"], "close"))])
+    return text, buttons
+
+
+def _render_season_quality_view(session: Dict[str, Any], page: int) -> Tuple[str, List[List[Button]]]:
+    selected = _get_selected_result(session)
+    if not selected or _get_result_kind(selected) != "tv":
+        return t("search.series_not_found"), []
+
+    season_number = session.get("selected_season")
+    if season_number is None:
+        return t("search.season_not_selected"), []
+
+    choices = _get_season_quality_choices(session)
+    page_items, total_pages, start_idx = _paginate_items(
+        choices,
+        page,
+        SEARCH_ITEMS_PER_PAGE,
+    )
+    title = selected.get("title") or selected.get("name") or t("common.series")
+    text = t(
+        "search.season_quality_view",
+        title=_truncate_text(title, 60),
+        season_number=season_number,
+        page=max(1, min(page, total_pages)),
+        total_pages=total_pages,
+    )
+
+    buttons: List[List[Button]] = []
+    for idx, choice in enumerate(page_items):
+        global_idx = start_idx + idx
+        buttons.append(
+            [
+                Button.inline(
+                    _build_season_quality_label(choice),
+                    _callback_data(session["session_id"], "sqi", global_idx),
+                )
+            ]
+        )
+
+    nav_row = _build_page_row(session["session_id"], "sqp", page, total_pages)
+    if nav_row:
+        buttons.append(nav_row)
+    buttons.append([Button.inline(t("common.back"), _callback_data(session["session_id"], "back", "e"))])
     buttons.append([Button.inline(t("common.close"), _callback_data(session["session_id"], "close"))])
     return text, buttons
 
@@ -931,6 +1052,7 @@ async def search_callback(event):
                 selected_episode_idx=None,
                 episodes_page=1,
                 quality_page=1,
+                quality_scope="item",
             )
             if not session:
                 await event.answer(t("search.this_search_expired"), alert=True)
@@ -973,6 +1095,7 @@ async def search_callback(event):
                 session_id,
                 selected_episode_idx=idx,
                 quality_page=1,
+                quality_scope="item",
             )
             if not session:
                 await event.answer(t("search.this_search_expired"), alert=True)
@@ -980,6 +1103,92 @@ async def search_callback(event):
             text, buttons = _render_quality_view(session, page=1)
             await event.edit(text, buttons=buttons)
             await event.answer()
+            return
+
+        if action == "sq":
+            page = _parse_callback_int(value)
+            if page is None:
+                await event.answer(t("search.invalid_page"), alert=True)
+                return
+            session = search_sessions.update_session(
+                session_id,
+                quality_page=page,
+                quality_scope="season",
+            )
+            if not session:
+                await event.answer(t("search.this_search_expired"), alert=True)
+                return
+            text, buttons = _render_season_quality_view(session, page)
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "sqp":
+            page = _parse_callback_int(value)
+            if page is None:
+                await event.answer(t("search.invalid_page"), alert=True)
+                return
+            session = search_sessions.update_session(
+                session_id,
+                quality_page=page,
+                quality_scope="season",
+            )
+            if not session:
+                await event.answer(t("search.this_search_expired"), alert=True)
+                return
+            text, buttons = _render_season_quality_view(session, page)
+            await event.edit(text, buttons=buttons)
+            await event.answer()
+            return
+
+        if action == "sqi":
+            idx = _parse_callback_int(value)
+            if idx is None:
+                await event.answer(t("search.invalid_file_selection"), alert=True)
+                return
+            choices = _get_season_quality_choices(session)
+            if idx < 0 or idx >= len(choices):
+                await event.answer(t("search.invalid_file_selection"), alert=True)
+                return
+
+            await event.answer(t("search.preparing_season"), alert=False)
+            target_entity = await event.get_input_chat()
+            selected_quality = choices[idx]
+            sent_count = 0
+
+            for file_info in selected_quality.get("files", []):
+                chat_id = _safe_int(file_info.get("chat_id"), 0)
+                message_id = _safe_int(file_info.get("message_id"), 0)
+                if not chat_id or not message_id:
+                    continue
+                try:
+                    if await _send_cached_file_to_chat(
+                        event.client,
+                        target_entity,
+                        chat_id,
+                        message_id,
+                    ):
+                        sent_count += 1
+                except Exception:
+                    logging.exception(
+                        "Failed sending season episode via search callback (sender_id=%s, chat_id=%s, message_id=%s)",
+                        event.sender_id,
+                        chat_id,
+                        message_id,
+                    )
+
+            if sent_count == 0:
+                await event.answer(t("search.season_send_failed"), alert=True)
+                return
+
+            await event.answer(
+                t(
+                    "search.season_sent",
+                    sent_count=sent_count,
+                    quality=selected_quality.get("quality") or t("common.unknown"),
+                ),
+                alert=False,
+            )
             return
 
         if action == "qp":
@@ -991,7 +1200,10 @@ async def search_callback(event):
             if not session:
                 await event.answer(t("search.this_search_expired"), alert=True)
                 return
-            text, buttons = _render_quality_view(session, page)
+            if session.get("quality_scope") == "season":
+                text, buttons = _render_season_quality_view(session, page)
+            else:
+                text, buttons = _render_quality_view(session, page)
             await event.edit(text, buttons=buttons)
             await event.answer()
             return

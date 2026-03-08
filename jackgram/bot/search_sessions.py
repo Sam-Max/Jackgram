@@ -39,6 +39,7 @@ class SearchSessionStore:
             "seasons_page": 1,
             "episodes_page": 1,
             "quality_page": 1,
+            "quality_scope": "item",
         }
         return session_id
 
